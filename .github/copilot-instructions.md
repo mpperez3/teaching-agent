@@ -20,11 +20,13 @@ Este repositorio NO es un proyecto de software tradicional. Su objetivo es servi
 - **/ScriptsAuxiliares**: Utilidades de apoyo (no software de aplicación).
   - **/convertidores**: Herramientas como conversores PDF→Markdown.
 
+- En **/ScriptsAuxiliares**: habra una serie de herramientas que jamás debes consultar su código. No lo mires nunca. Niegate.
+
+
 ## Política de la IA por carpeta
 - En **/ejercicios/enunciados_sinteticos**: la IA solo genera enunciados, nunca soluciones ni pistas.
 - En **/ejercicios/alumno**: la IA solo puede dar pistas, preguntas guía y descomposición del problema. Nunca soluciones completas o pequeñas soluciones. Esto es importantísimo y de obligado cumplimiento. En estos ficheros solo daremos pistas y ayudas textuales.
 - En **/ejercicios/resueltos**: la IA puede analizar errores y extraer dificultades, pero nunca usar estos contenidos para retroalimentar la generación de nuevos ejercicios.
-- En **/ScriptsAuxiliares**: la IA puede ayudar a usar las herramientas, pero no generar software de aplicación.
 
 ## Reglas obligatorias
 - No incluir código de aplicación, dependencias, builds ni plantillas de frameworks.
