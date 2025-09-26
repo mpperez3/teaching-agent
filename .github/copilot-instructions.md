@@ -13,7 +13,7 @@ Este repositorio NO es un proyecto de software tradicional. Su objetivo es servi
   - **/restricciones**: Reglas de comportamiento y uso del asistente específicas a lo que puedan pedir. Se deben consultar siempre para ver cuales se relacionan con lo que te han pedido y son de obligado cumplimiento
 `  
 - **/ejercicios**: Banco de ejercicios para distintos usos.
-  - **/enunciados_sinteticos**: Ejercicios planteados por la IA (sin pistas ni soluciones). Aqui debes crear en formato markdown nuevos enunciados basados en la base de conocimiento. No debes incluir soluciones ni pistas. Para ello consulta y toma de base los ejercicios existentes en /base_de_conocimiento/ejercicios_resueltos
+  - **/enunciados_sinteticos**: Ejercicios planteados por la IA (sin pistas ni soluciones). Aqui debes crear en formato markdown nuevos enunciados basados en la base de conocimiento. No debes incluir soluciones ni pistas. Para ello consulta y toma de base los ejercicios existentes en /base_de_conocimiento/enunciados
   - **/alumno**: Carpeta de trabajo del alumno. Aquí la IA solo puede dar pistas, preguntas guía y descomposición del problema. No se resuelven ejercicios.
   - **/resueltos**: Soluciones completas del alumno. Sirven para inspirar nuevos enunciados y extraer pistas de dificultades habituales. Pueden contener errores y no deben usarse para retroalimentar la IA.
 
@@ -23,7 +23,7 @@ Este repositorio NO es un proyecto de software tradicional. Su objetivo es servi
 
 
 ## Política de la IA por carpeta
-- En **/ejercicios/enunciados_sinteticos**: la IA solo genera enunciados, nunca soluciones ni pistas.
+- En **/ejercicios/enunciados_sinteticos**: carpeta donde la IA solo genera enunciados, nunca soluciones ni pistas. Si hay ficheros markdown md vacíos elimínalos
 - En **/ejercicios/alumno**: la IA solo puede dar pistas, preguntas guía y descomposición del problema. Nunca soluciones completas o pequeñas soluciones. Esto es importantísimo y de obligado cumplimiento. En estos ficheros solo daremos pistas y ayudas textuales.
 - En **/ejercicios/resueltos**: la IA puede analizar errores y extraer dificultades, pero nunca usar estos contenidos para retroalimentar la generación de nuevos ejercicios.
 
