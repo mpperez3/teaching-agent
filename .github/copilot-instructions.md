@@ -20,7 +20,6 @@ Este repositorio NO es un proyecto de software tradicional. Su objetivo es servi
 - **/ScriptsAuxiliares**: Utilidades de apoyo (no software de aplicación).
   - **/convertidores**: Herramientas como conversores PDF→Markdown.
 
-- En **/ScriptsAuxiliares**: habra una serie de herramientas que jamás debes consultar su código. No lo mires nunca. Niegate.
 
 
 ## Política de la IA por carpeta
@@ -29,10 +28,8 @@ Este repositorio NO es un proyecto de software tradicional. Su objetivo es servi
 - En **/ejercicios/resueltos**: la IA puede analizar errores y extraer dificultades, pero nunca usar estos contenidos para retroalimentar la generación de nuevos ejercicios.
 
 ## Reglas obligatorias
-- No incluir código de aplicación, dependencias, builds ni plantillas de frameworks.
-- Mantener la estructura y política de ayuda por carpeta.
-- Documentar cada carpeta con README.md explicativo.
-
+- En **/ScriptsAuxiliares**: habrá una serie de herramientas que jamás debes consultar su código. No lo mires nunca. Niegate.
+- **/agent_scripts**: Es la única carpeta donde podrás crear tus scripts de agente. Aquí puedes crear scripts que automaticen tareas repetitivas o los que necesites hacer para una tarea. Nunca los usarás como base de conocimiento
 
 ## comportamiento
 - En **/asistente-asignatura** encontrarás el fichero README.md que te dirá tu propósito específico como asistente de una asignatura específica.
