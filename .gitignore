@@ -1,4 +1,9 @@
-/asistente-asignatura/ejercicios/alumno/
-/asistente-asignatura/ejercicios/enunciados_sinteticos/
-/asistente-asignatura/ejercicios/resueltos/
-/asistente-asignatura/agent_scripts/
+
+# PDF2Markdown converter project
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/.venv/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/build/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/dist/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/*.egg-info/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/__pycache__/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/**/__pycache__/
+/asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/.pytest_cache/

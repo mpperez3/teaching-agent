@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf2markdown-simple"
+version = "1.0.0"
+description = "Simple PDF to Markdown converter for base_de_conocimiento"
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+pdf2md = "simple_converter:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
+[tool.setuptools.py-modules]
+# Para que simple_converter.py sea reconocido como módulo
+py-modules = ["simple_converter"]
