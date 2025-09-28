@@ -2,8 +2,6 @@
 name = "markdown2pdf-simple"
 version = "1.0.0"
 description = "Conversor sencillo de Markdown a PDF para el proyecto teaching-agent"
-authors = ["Teaching Agent <devnull@example.com>"]
-package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
