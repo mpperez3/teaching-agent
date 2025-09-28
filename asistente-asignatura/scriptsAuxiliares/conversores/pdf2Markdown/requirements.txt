@@ -1,1 +1,4 @@
-pymupdf>=1.23.0
+docling>=2.54.0
+docling-core>=2.54.0
+docling-parse>=2.54.0
+

@@ -8,7 +8,9 @@ version = "1.0.0"
 description = "Simple PDF to Markdown converter for base_de_conocimiento"
 requires-python = ">=3.10"
 dependencies = [
-    "pymupdf>=1.23.0",
+    "docling>=2.54.0",
+    "docling-core>=2.54.0",
+    "docling-parse>=2.54.0",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +25,5 @@ pdf2md = "simple_converter:main"
 where = ["."]
 include = ["*"]
 
-[tool.setuptools.py-modules]
-# Para que simple_converter.py sea reconocido como módulo
+[tool.setuptools]
 py-modules = ["simple_converter"]
