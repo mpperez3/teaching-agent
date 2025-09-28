@@ -1,31 +1,41 @@
 # Markdown to PDF Converter
 
 Conversor Python específico para el proyecto que transforma archivos Markdown en documentos PDF bien formateados. El proyecto
-incluye su propio environment virtual aislado dentro de la carpeta `markdown2Pdf`.
+utiliza [Poetry](https://python-poetry.org/) para gestionar un entorno virtual aislado dentro de la carpeta `markdown2Pdf`.
 
 ## 🚀 Uso Rápido
 
-### Conversión automática con environment dedicado
+### Preparar el entorno (una sola vez)
 ```bash
 cd asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf
-./run_md2pdf.sh convert
+./run_md2pdf.sh install
 ```
 
-### Solo activar el environment
+### Actualizar dependencias según `poetry.lock`
 ```bash
-cd asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf
-./run_md2pdf.sh
+./run_md2pdf.sh update
+```
+
+### Reconstruir el entorno desde cero
+```bash
+./run_md2pdf.sh reinstall
+```
+
+### Ejecutar la conversión
+```bash
+./run_md2pdf.sh convert
 ```
 
 ## 📁 Estructura del Proyecto
 
 ```
 markdown2Pdf/
-├── .venv/                # Environment virtual (se crea en la primera ejecución)
+├── .venv/                # Entorno Poetry (generado automáticamente)
 ├── simple_converter.py   # Conversor Markdown → PDF
-├── run_md2pdf.sh         # Script de activación y ejecución
-├── requirements.txt      # Dependencias mínimas
-├── pyproject.toml        # Configuración del proyecto
+├── run_md2pdf.sh         # Script de gestión y ejecución
+├── requirements.txt      # Compatibilidad legacy (no es necesario con Poetry)
+├── pyproject.toml        # Configuración del proyecto (Poetry)
+├── poetry.lock           # Versionado exacto de dependencias
 └── README.md             # Esta documentación
 ```
 
@@ -34,10 +44,10 @@ markdown2Pdf/
 - **Conversión recursiva** de todos los Markdown en un directorio y subdirectorios.
 - **Modo archivo único** para convertir solo un `.md`.
 - **Renderizado profesional** con tipografía moderna, encabezados y pies de página automáticos.
-- **Resaltado de sintaxis** basado en *Pygments* para bloques de código (incluye Java, Python, C y más).
+- **Bloques de código enriquecidos** con resaltado diferenciado por lenguaje (Python, Java, C/C++ y más), numeración de líneas y etiquetas visibles.
 - **Soporte completo** para tablas, listas y citas con estilos coherentes.
 - **Salida en la misma carpeta** que el Markdown origen, con la misma ruta relativa.
-- **Environment aislado** que no interfiere con otras instalaciones Python.
+- **Environment aislado con Poetry** que no interfiere con otras instalaciones Python.
 
 ## 📄 Salida
 

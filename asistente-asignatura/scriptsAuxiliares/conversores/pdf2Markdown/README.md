@@ -1,6 +1,6 @@
 # PDF to Markdown Converter
 
-Un conversor Python específico para el proyecto que convierte archivos PDF a formato Markdown. Este proyecto tiene su propio environment virtual autocontenido dentro de la carpeta pdf2Markdown.
+Un conversor Python específico para el proyecto que convierte archivos PDF a formato Markdown. Este proyecto utiliza [Poetry](https://python-poetry.org/) para gestionar un entorno virtual autocontenido dentro de la carpeta `pdf2Markdown`.
 
 ## ✅ Estado de Conversión Verificado
 
@@ -11,36 +11,46 @@ Un conversor Python específico para el proyecto que convierte archivos PDF a fo
 
 ## 🚀 Uso Rápido
 
-### Conversión automática con environment dedicado
+### Preparar el entorno (una sola vez)
 ```bash
 cd asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown
-./run_pdf2md.sh convert
+./run_pdf2md.sh install
 ```
 
-### Solo activar el environment
+### Actualizar dependencias según `poetry.lock`
 ```bash
-cd asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown
-./run_pdf2md.sh
+./run_pdf2md.sh update
+```
+
+### Reconstruir el entorno desde cero
+```bash
+./run_pdf2md.sh reinstall
+```
+
+### Ejecutar la conversión
+```bash
+./run_pdf2md.sh convert
 ```
 
 ## 📁 Estructura del Proyecto
 
 ```
 pdf2Markdown/
-├── pdf2md_env/          # Environment virtual específico del proyecto
+├── .venv/               # Entorno Poetry (generado automáticamente)
 ├── simple_converter.py  # Conversor principal (funcional)
-├── run_pdf2md.sh        # Script de activación y ejecución
-├── requirements.txt     # Dependencias mínimas
-├── pyproject.toml       # Configuración del proyecto
-└── README.md           # Esta documentación
+├── run_pdf2md.sh        # Script de gestión y ejecución
+├── requirements.txt     # Compatibilidad legacy (no es necesario con Poetry)
+├── pyproject.toml       # Configuración del proyecto (Poetry)
+├── poetry.lock          # Versionado exacto de dependencias
+└── README.md            # Esta documentación
 ```
 
-## 🔧 Environment Virtual Específico
+## 🔧 Entorno gestionado con Poetry
 
-Este proyecto incluye su propio environment virtual (`pdf2md_env/`) que:
-- **Es autocontenido** - No interfiere con otros proyectos Python
-- **Se instala automáticamente** - El script `run_pdf2md.sh` gestiona dependencias
-- **Incluye solo lo necesario** - Solo pymupdf para extracción de texto PDF
+Este proyecto incluye su propio entorno virtual (`.venv/`) gestionado con Poetry:
+- **Es autocontenido** - No interfiere con otros proyectos Python.
+- **Se crea y mantiene** mediante los comandos `install`, `update` y `reinstall` del script.
+- **Incluye dependencias oficiales de Docling** para garantizar la conversión estable de PDF a Markdown.
 
 ## ⚙️ Características
 
@@ -49,7 +59,7 @@ Este proyecto incluye su propio environment virtual (`pdf2md_env/`) que:
 - **Preserva estructura** - outputs `.md` en las mismas carpetas
 - **Simple y confiable** - usa pymupdf para extracción de texto
 - **Manejo de errores** - reporta conversiones exitosas/fallidas
-- **Environment aislado** - no afecta otras instalaciones Python
+- **Environment aislado con Poetry** - no afecta otras instalaciones Python
 
 ## 📄 Salida
 
