@@ -1,66 +1,109 @@
 #!/bin/bash
-# Script para activar el environment PDF2Markdown y ejecutar el converter
+# Script de gestión e interacción con el conversor PDF → Markdown
 
-echo "🚀 Activando environment PDF to Markdown..."
+set -Eeuo pipefail
 
-# Navegar al directorio del proyecto
 cd "$(dirname "$0")"
 
-# Verificar que el environment existe
-if [ ! -d ".venv" ]; then
-    echo "❌ Error: Environment .venv no encontrado"
-    echo "   Creando environment virtual..."
-    python3 -m venv .venv
-fi
+export POETRY_VIRTUALENVS_IN_PROJECT=1
 
-# Activar el environment
-source .venv/bin/activate
+ensure_poetry() {
+    if ! command -v poetry >/dev/null 2>&1; then
+        echo "❌ Poetry no está instalado en el sistema."
+        echo "   Instálalo siguiendo las instrucciones oficiales: https://python-poetry.org/docs/"
+        exit 1
+    fi
+}
 
-# Instalar dependencias de docling
-if ! python -c "from docling.document_converter import DocumentConverter" 2>/dev/null; then
-    echo "📦 Instalando docling y dependencias usando pyproject.toml..."
-    pip install --upgrade pip
-    pip install -e .
-    echo "📦 Instalando docling directamente por si acaso..."
-    pip install docling>=2.54.0 docling-core>=2.54.0 docling-parse>=2.54.0
-fi
+install_environment() {
+    ensure_poetry
+    echo "📦 Instalando dependencias con Poetry..."
+    poetry install
+}
 
-echo "✅ Environment activado correctamente"
-echo "📁 Directorio actual: $(pwd)"
-echo "🐍 Python: $(which python)"
+ensure_environment() {
+    if [ ! -d ".venv" ]; then
+        echo "⚙️  No se encontró el entorno .venv. Creándolo con Poetry..."
+        install_environment
+    fi
+}
 
-# Verificar que docling está disponible
-if python -c "from docling.document_converter import DocumentConverter; print('✅ Docling importado correctamente')" 2>/dev/null; then
-    echo "✅ Docling verificado correctamente"
-else
-    echo "❌ Error: Docling no se puede importar"
-    echo "Intentando instalar nuevamente..."
-    pip install --force-reinstall docling docling-core docling-parse
-fi
+update_environment() {
+    ensure_poetry
+    echo "🔄 Actualizando dependencias con Poetry..."
+    poetry update
+}
 
-# Manejar argumentos
+reinstall_environment() {
+    ensure_poetry
+    if [ -d ".venv" ]; then
+        echo "🧹 Eliminando entorno virtual actual..."
+        rm -rf .venv
+    fi
+    install_environment
+}
+
+verify_dependencies() {
+    ensure_poetry
+    ensure_environment
+    echo "🔍 Verificando dependencias principales..."
+    poetry run python - <<'PYCODE'
+try:
+    from docling.document_converter import DocumentConverter  # noqa: F401
+    print("✅ Docling verificado correctamente")
+except Exception as exc:  # pragma: no cover - ejecución manual
+    raise SystemExit(f"❌ Error al verificar dependencias: {exc}")
+PYCODE
+}
+
+run_converter() {
+    ensure_poetry
+    ensure_environment
+    verify_dependencies
+    echo "📁 Directorio actual: $(pwd)"
+    echo "🐍 Python: $(poetry run which python)"
+    echo ""
+    echo "🔄 Ejecutando conversión PDF → Markdown..."
+    poetry run python simple_converter.py "$@"
+}
+
+print_usage() {
+    cat <<'EOF'
+Uso del script:
+  ./run_pdf2md.sh install                  # Crear/actualizar el entorno con Poetry
+  ./run_pdf2md.sh update                   # Actualizar dependencias al último lock
+  ./run_pdf2md.sh reinstall                # Regenerar el entorno desde cero
+  ./run_pdf2md.sh convert [opciones]       # Ejecutar el conversor PDF → Markdown
+  ./run_pdf2md.sh help                     # Mostrar la ayuda del conversor
+EOF
+}
+
 if [ $# -eq 0 ]; then
-    echo ""
-    echo "📋 Uso del convertidor PDF to Markdown:"
-    echo "  ./run_pdf2md.sh convert                    # Convierte todos los PDFs en base_de_conocimiento"
-    echo "  ./run_pdf2md.sh -f archivo.pdf            # Convierte un archivo específico"
-    echo "  ./run_pdf2md.sh -d /ruta/a/directorio     # Convierte todos los PDFs en un directorio"
-    echo ""
-    echo "Para salir del environment: deactivate"
-elif [ "$1" = "convert" ]; then
-    echo ""
-    echo "🔄 Ejecutando conversión PDF to Markdown (todos los archivos)..."
-    python simple_converter.py
-elif [ "$1" = "-f" ] && [ -n "$2" ]; then
-    echo ""
-    echo "🔄 Convirtiendo archivo: $2"
-    python simple_converter.py -f "$2"
-elif [ "$1" = "-d" ] && [ -n "$2" ]; then
-    echo ""
-    echo "🔄 Convirtiendo directorio: $2"
-    python simple_converter.py -d "$2"
-else
-    echo ""
-    echo "🔄 Ejecutando conversión con argumentos: $@"
-    python simple_converter.py "$@"
+    print_usage
+    exit 0
 fi
+
+case "$1" in
+    install)
+        install_environment
+        ;;
+    update)
+        update_environment
+        ;;
+    reinstall)
+        reinstall_environment
+        ;;
+    convert)
+        shift
+        run_converter "$@"
+        ;;
+    help|-h|--help)
+        ensure_poetry
+        ensure_environment
+        poetry run python simple_converter.py --help
+        ;;
+    *)
+        print_usage
+        exit 1
+        ;;
+esac

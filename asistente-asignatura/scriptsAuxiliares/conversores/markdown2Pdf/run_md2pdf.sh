@@ -1,60 +1,111 @@
 #!/bin/bash
-# Script para activar el environment Markdown2PDF y ejecutar el conversor
+# Script de gestión e interacción con el conversor Markdown → PDF
 
-echo "🚀 Activando environment Markdown to PDF..."
+set -Eeuo pipefail
 
 cd "$(dirname "$0")"
 
-if [ ! -d ".venv" ]; then
-    echo "❌ Environment .venv no encontrado, creando..."
-    python3 -m venv .venv
-fi
+export POETRY_VIRTUALENVS_IN_PROJECT=1
 
-source .venv/bin/activate
+ensure_poetry() {
+    if ! command -v poetry >/dev/null 2>&1; then
+        echo "❌ Poetry no está instalado en el sistema."
+        echo "   Instálalo siguiendo las instrucciones oficiales: https://python-poetry.org/docs/"
+        exit 1
+    fi
+}
 
-if ! python -c "import markdown" 2>/dev/null; then
-    echo "📦 Instalando dependencias del proyecto..."
-    pip install --upgrade pip
-    pip install -e .
-fi
+install_environment() {
+    ensure_poetry
+    echo "📦 Instalando dependencias con Poetry..."
+    poetry install
+}
 
-echo "✅ Environment activado"
-echo "📁 Directorio actual: $(pwd)"
-echo "🐍 Python: $(which python)"
+ensure_environment() {
+    if [ ! -d ".venv" ]; then
+        echo "⚙️  No se encontró el entorno .venv. Creándolo con Poetry..."
+        install_environment
+    fi
+}
 
-echo "Verificando dependencias principales..."
-python - <<'PYCODE'
+update_environment() {
+    ensure_poetry
+    echo "🔄 Actualizando dependencias con Poetry..."
+    poetry update
+}
+
+reinstall_environment() {
+    ensure_poetry
+    if [ -d ".venv" ]; then
+        echo "🧹 Eliminando entorno virtual actual..."
+        rm -rf .venv
+    fi
+    install_environment
+}
+
+verify_dependencies() {
+    ensure_poetry
+    ensure_environment
+    echo "🔍 Verificando dependencias principales..."
+    poetry run python - <<'PYCODE'
 try:
     import markdown  # noqa: F401
     import bs4  # noqa: F401
     import weasyprint  # noqa: F401
     print("✅ Dependencias verificadas correctamente")
 except Exception as exc:  # pragma: no cover - ejecución manual
-    print(f"❌ Error al verificar dependencias: {exc}")
+    raise SystemExit(f"❌ Error al verificar dependencias: {exc}")
 PYCODE
+}
 
-if [ "$1" = "convert" ]; then
-    shift
+run_converter() {
+    ensure_poetry
+    ensure_environment
+    verify_dependencies
+    echo "📁 Directorio actual: $(pwd)"
+    echo "🐍 Python: $(poetry run which python)"
     echo ""
-    echo "🔄 Ejecutando conversión Markdown to PDF..."
-    if [ $# -gt 0 ]; then
-        echo "📝 Argumentos adicionales: $@"
-        python simple_converter.py "$@"
-    else
-        python simple_converter.py
-    fi
-elif [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    echo ""
-    echo "📖 Ayuda del conversor Markdown to PDF:"
-    echo ""
-    python simple_converter.py --help
-else
-    echo ""
-    echo "Uso del script:"
-    echo "  ./run_md2pdf.sh convert                 # Convertir todos los Markdown"
-    echo "  ./run_md2pdf.sh convert -f archivo.md   # Convertir un archivo específico"
-    echo "  ./run_md2pdf.sh convert -d carpeta      # Convertir todos los Markdown de una carpeta"
-    echo "  ./run_md2pdf.sh help                    # Mostrar ayuda completa"
-    echo ""
-    echo "Para salir del environment: deactivate"
+    echo "🔄 Ejecutando conversión Markdown → PDF..."
+    poetry run python simple_converter.py "$@"
+}
+
+print_usage() {
+    cat <<'EOF'
+Uso del script:
+  ./run_md2pdf.sh install                 # Crear/actualizar el entorno con Poetry
+  ./run_md2pdf.sh update                  # Actualizar dependencias al último lock
+  ./run_md2pdf.sh reinstall               # Regenerar el entorno desde cero
+  ./run_md2pdf.sh convert [opciones]      # Ejecutar el conversor Markdown → PDF
+  ./run_md2pdf.sh help                    # Mostrar la ayuda del conversor
+EOF
+}
+
+if [ $# -eq 0 ]; then
+    print_usage
+    exit 0
 fi
+
+case "$1" in
+    install)
+        install_environment
+        ;;
+    update)
+        update_environment
+        ;;
+    reinstall)
+        reinstall_environment
+        ;;
+    convert)
+        shift
+        run_converter "$@"
+        ;;
+    help|-h|--help)
+        ensure_poetry
+        ensure_environment
+        poetry run python simple_converter.py --help
+        ;;
+    *)
+        print_usage
+        exit 1
+        ;;
+esac
