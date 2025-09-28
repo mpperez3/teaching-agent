@@ -9,8 +9,8 @@ description = "Conversor sencillo de Markdown a PDF para el proyecto teaching-ag
 requires-python = ">=3.10"
 dependencies = [
     "markdown>=3.4",
-    "beautifulsoup4>=4.12",
-    "reportlab>=4.0",
+    "pygments>=2.15",
+    "weasyprint>=58.0",
 ]
 
 [project.optional-dependencies]
