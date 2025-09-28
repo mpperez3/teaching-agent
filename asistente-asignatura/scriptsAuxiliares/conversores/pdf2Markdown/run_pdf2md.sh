@@ -38,31 +38,29 @@ else
     pip install --force-reinstall docling docling-core docling-parse
 fi
 
-# Procesar argumentos
-if [ "$1" = "convert" ]; then
+# Manejar argumentos
+if [ $# -eq 0 ]; then
     echo ""
-    echo "🔄 Ejecutando conversión PDF to Markdown..."
-
-    # Pasar argumentos adicionales al converter
-    shift # Remove 'convert' from arguments
-    if [ $# -gt 0 ]; then
-        echo "📝 Argumentos adicionales: $@"
-        python simple_converter.py "$@"
-    else
-        python simple_converter.py
-    fi
-elif [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    echo ""
-    echo "📖 Ayuda del conversor PDF to Markdown:"
-    echo ""
-    python simple_converter.py --help
-else
-    echo ""
-    echo "Uso del script:"
-    echo "  ./run_pdf2md.sh convert                    # Convertir todos los PDFs"
-    echo "  ./run_pdf2md.sh convert --default-lang java  # Con Java por defecto"
-    echo "  ./run_pdf2md.sh convert -f archivo.pdf     # Convertir archivo específico"
-    echo "  ./run_pdf2md.sh help                       # Ver ayuda completa"
+    echo "📋 Uso del convertidor PDF to Markdown:"
+    echo "  ./run_pdf2md.sh convert                    # Convierte todos los PDFs en base_de_conocimiento"
+    echo "  ./run_pdf2md.sh -f archivo.pdf            # Convierte un archivo específico"
+    echo "  ./run_pdf2md.sh -d /ruta/a/directorio     # Convierte todos los PDFs en un directorio"
     echo ""
     echo "Para salir del environment: deactivate"
+elif [ "$1" = "convert" ]; then
+    echo ""
+    echo "🔄 Ejecutando conversión PDF to Markdown (todos los archivos)..."
+    python simple_converter.py
+elif [ "$1" = "-f" ] && [ -n "$2" ]; then
+    echo ""
+    echo "🔄 Convirtiendo archivo: $2"
+    python simple_converter.py -f "$2"
+elif [ "$1" = "-d" ] && [ -n "$2" ]; then
+    echo ""
+    echo "🔄 Convirtiendo directorio: $2"
+    python simple_converter.py -d "$2"
+else
+    echo ""
+    echo "🔄 Ejecutando conversión con argumentos: $@"
+    python simple_converter.py "$@"
 fi

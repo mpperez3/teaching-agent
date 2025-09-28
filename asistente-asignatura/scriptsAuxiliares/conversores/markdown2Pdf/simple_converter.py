@@ -34,9 +34,10 @@ def _create_styles() -> dict[str, ParagraphStyle]:
             leading=14,
         )
     )
+    
     styles.add(
         ParagraphStyle(
-            name="Code",
+            name="CustomCode",
             fontName="Courier",
             fontSize=9,
             leading=11,
@@ -50,6 +51,7 @@ def _create_styles() -> dict[str, ParagraphStyle]:
             spaceAfter=6,
         )
     )
+    
     styles.add(
         ParagraphStyle(
             name="BlockQuote",
@@ -148,7 +150,7 @@ def _render_element(element: Tag, styles: dict[str, ParagraphStyle]) -> Iterable
     if name == "pre":
         code_text = element.get_text().rstrip("\n")
         if code_text:
-            yield Preformatted(code_text, styles["Code"])
+            yield Preformatted(code_text, styles["CustomCode"])
             yield Spacer(1, 0.1 * inch)
         return
 
@@ -179,7 +181,7 @@ def _render_element(element: Tag, styles: dict[str, ParagraphStyle]) -> Iterable
                 rows.append(" | ".join(cells))
         if rows:
             table_text = "\n".join(rows)
-            yield Preformatted(table_text, styles["Code"])
+            yield Preformatted(table_text, styles["CustomCode"])
             yield Spacer(1, 0.1 * inch)
         return
 
@@ -290,7 +292,7 @@ def convert_directory_markdowns(directory: Path) -> tuple[int, int]:
 
 def convert_all_markdowns() -> tuple[int, int]:
     script_dir = Path(__file__).parent
-    base_path = script_dir.parent.parent.parent / "base_de_conocimiento"
+    base_path = script_dir.parent.parent.parent / "enunciados_sinteticos"
     if not base_path.exists():
         print(f"Error: La ruta base {base_path} no existe")
         return 0, 0
@@ -303,7 +305,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos:
-  python simple_converter.py                    # Convierte todos los Markdown de base_de_conocimiento
+  python simple_converter.py                    # Convierte todos los Markdown de enunciados_sinteticos
   python simple_converter.py -f documento.md    # Convierte un único archivo Markdown
   python simple_converter.py -d carpeta         # Convierte todos los Markdown en una carpeta (recursivo)
         """,

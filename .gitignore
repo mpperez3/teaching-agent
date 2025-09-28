@@ -2,6 +2,10 @@
 /asistente-asignatura/ejercicios/enunciados_sinteticos/
 /asistente-asignatura/ejercicios/resueltos/
 /asistente-asignatura/agent_scripts/
+/asistente-asignatura/ejercicios/**/*.pdf
+/asistente-asignatura/ejercicios/**/*.md
+/asistente-asignatura/ejercicios/**/*.java
+
 
 # PDF2Markdown converter project
 /asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/.venv/
