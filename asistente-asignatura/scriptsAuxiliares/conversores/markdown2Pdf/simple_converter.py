@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from markdown import markdown
@@ -20,7 +20,19 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Preformatted, SimpleDocTemplate, Spacer
+from reportlab.pdfbase import pdfmetrics
+from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer
+
+try:  # Syntax highlighting is optional
+    from pygments import lex
+    from pygments.lexers import TextLexer, get_lexer_by_name, guess_lexer
+    from pygments.token import Token
+    from pygments.util import ClassNotFound
+
+    PYGMENTS_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    PYGMENTS_AVAILABLE = False
+    Token = None  # type: ignore
 
 
 def _create_styles() -> dict[str, ParagraphStyle]:
@@ -34,7 +46,7 @@ def _create_styles() -> dict[str, ParagraphStyle]:
             leading=14,
         )
     )
-    
+
     styles.add(
         ParagraphStyle(
             name="CustomCode",
@@ -43,15 +55,16 @@ def _create_styles() -> dict[str, ParagraphStyle]:
             leading=11,
             leftIndent=12,
             rightIndent=12,
-            backColor=colors.whitesmoke,
+            backColor=colors.HexColor("#f6f8fa"),
             borderColor=colors.lightgrey,
             borderWidth=0.25,
             borderPadding=6,
             spaceBefore=6,
             spaceAfter=6,
+            textColor=colors.HexColor("#2f2f2f"),
         )
     )
-    
+
     styles.add(
         ParagraphStyle(
             name="BlockQuote",
@@ -81,16 +94,241 @@ def _create_styles() -> dict[str, ParagraphStyle]:
     return styles
 
 
+DEFAULT_CODE_COLOR = colors.HexColor("#2f2f2f")
+
+if PYGMENTS_AVAILABLE:
+    TOKEN_COLOR_MAP = [
+        (Token.Comment, colors.HexColor("#6a737d")),
+        (Token.Keyword, colors.HexColor("#d73a49")),
+        (Token.Operator, colors.HexColor("#d73a49")),
+        (Token.Name.Function, colors.HexColor("#005cc5")),
+        (Token.Name.Class, colors.HexColor("#6f42c1")),
+        (Token.Name.Builtin, colors.HexColor("#005cc5")),
+        (Token.Name.Decorator, colors.HexColor("#6f42c1")),
+        (Token.Literal.String, colors.HexColor("#032f62")),
+        (Token.Literal.Number, colors.HexColor("#005cc5")),
+        (Token.Name.Attribute, colors.HexColor("#24292e")),
+        (Token.Punctuation, colors.HexColor("#24292e")),
+    ]
+else:  # pragma: no cover - sin pygments
+    TOKEN_COLOR_MAP = []
+
+
+class CodeBlockFlowable(Flowable):
+    """Render code blocks with optional syntax highlighting and soft wrapping."""
+
+    def __init__(
+        self,
+        token_lines: List[List[tuple[colors.Color, str]]],
+        style: ParagraphStyle,
+    ) -> None:
+        super().__init__()
+        self._original_lines = token_lines or [[(DEFAULT_CODE_COLOR, "")]]
+        self.style = style
+        self._wrapped_lines: List[List[tuple[colors.Color, str]]] = []
+        self._available_width: Optional[float] = None
+        self._content_width: float = 0.0
+        self._block_width: float = 0.0
+        self._line_height: float = float(style.leading or (style.fontSize * 1.2))
+        self._padding: float = float(getattr(style, "borderPadding", 4))
+        self._border_width: float = float(getattr(style, "borderWidth", 0))
+        self.height: float = 0.0
+
+    def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:
+        if availWidth != self._available_width:
+            self._layout_lines(availWidth)
+        return availWidth, self.height
+
+    def _layout_lines(self, avail_width: float) -> None:
+        self._available_width = avail_width
+        left_indent = float(getattr(self.style, "leftIndent", 0))
+        right_indent = float(getattr(self.style, "rightIndent", 0))
+        usable_width = max(avail_width - left_indent - right_indent, 12.0)
+        inner_width = max(usable_width - 2 * self._padding, 4.0)
+
+        char_width = pdfmetrics.stringWidth("M", self.style.fontName, self.style.fontSize)
+        max_chars = max(1, int(inner_width // max(char_width, 0.1)))
+
+        wrapped_lines: List[List[tuple[colors.Color, str]]] = []
+        for line_tokens in self._original_lines:
+            wrapped_lines.extend(self._wrap_line_tokens(line_tokens, max_chars))
+
+        if not wrapped_lines:
+            wrapped_lines = [[(DEFAULT_CODE_COLOR, "")]]
+
+        self._wrapped_lines = wrapped_lines
+        self._content_width = inner_width
+        self._block_width = inner_width + 2 * self._padding
+        line_count = len(self._wrapped_lines)
+        content_height = max(1, line_count) * self._line_height
+        self.height = content_height + 2 * self._padding + 2 * self._border_width
+
+    def _wrap_line_tokens(
+        self,
+        line_tokens: List[tuple[colors.Color, str]],
+        max_chars: int,
+    ) -> List[List[tuple[colors.Color, str]]]:
+        if not line_tokens:
+            return [[]]
+
+        wrapped: List[List[tuple[colors.Color, str]]] = []
+        current_line: List[tuple[colors.Color, str]] = []
+        current_length = 0
+
+        for color, segment in line_tokens:
+            text = segment.replace("\t", "    ")
+            while text:
+                remaining = max_chars - current_length
+                if remaining <= 0:
+                    wrapped.append(current_line)
+                    current_line = []
+                    current_length = 0
+                    remaining = max_chars
+
+                chunk = text[:remaining]
+                current_line.append((color, chunk))
+                current_length += len(chunk)
+                text = text[remaining:]
+
+                if text:
+                    wrapped.append(current_line)
+                    current_line = []
+                    current_length = 0
+
+        wrapped.append(current_line)
+        return wrapped
+
+    def draw(self) -> None:  # pragma: no cover - rendering
+        canvas = self.canv
+        canvas.saveState()
+
+        left_indent = float(getattr(self.style, "leftIndent", 0))
+        padding = self._padding
+        block_x = left_indent
+        block_y = 0
+        block_height = self.height
+        block_width = self._block_width
+
+        back_color = self.style.backColor or colors.whitesmoke
+        border_color = self.style.borderColor or colors.transparent
+
+        canvas.setFillColor(back_color)
+        canvas.setStrokeColor(back_color)
+        canvas.rect(block_x, block_y, block_width, block_height, stroke=0, fill=1)
+
+        if self._border_width > 0:
+            canvas.setLineWidth(self._border_width)
+            canvas.setStrokeColor(border_color)
+            canvas.rect(block_x, block_y, block_width, block_height, stroke=1, fill=0)
+
+        text_x_start = block_x + padding
+        baseline = block_height - padding - self.style.fontSize
+
+        font_name = self.style.fontName
+        font_size = self.style.fontSize
+        canvas.setFont(font_name, font_size)
+
+        default_color = getattr(self.style, "textColor", DEFAULT_CODE_COLOR)
+
+        for line in self._wrapped_lines:
+            x_cursor = text_x_start
+            if line:
+                for color, segment in line:
+                    canvas.setFillColor(color or default_color)
+                    canvas.drawString(x_cursor, baseline, segment)
+                    segment_width = pdfmetrics.stringWidth(segment, font_name, font_size)
+                    x_cursor += segment_width
+            baseline -= self._line_height
+
+        canvas.restoreState()
+
+
+def _color_for_token(token_type) -> colors.Color:
+    if not PYGMENTS_AVAILABLE or token_type is None:
+        return DEFAULT_CODE_COLOR
+    for candidate, color in TOKEN_COLOR_MAP:
+        if token_type in candidate:
+            return color
+    return DEFAULT_CODE_COLOR
+
+
+def _resolve_code_language(element: Tag) -> Optional[str]:
+    code_tag = element.find("code")
+    if not code_tag:
+        return None
+
+    class_attr = code_tag.get("class", [])
+    if isinstance(class_attr, str):
+        class_attr = [class_attr]
+
+    for class_name in class_attr:
+        if class_name.startswith("language-"):
+            return class_name[len("language-") :]
+    return None
+
+
+def _select_lexer(language: Optional[str], code_text: str):  # pragma: no cover - small wrapper
+    if not PYGMENTS_AVAILABLE:
+        raise RuntimeError("Pygments no disponible")
+
+    if language:
+        try:
+            return get_lexer_by_name(language)
+        except ClassNotFound:
+            pass
+
+    try:
+        return guess_lexer(code_text)
+    except ClassNotFound:
+        return TextLexer()
+
+
+def _tokenize_code(code_text: str, language: Optional[str]) -> List[List[tuple[colors.Color, str]]]:
+    if not code_text:
+        return [[(DEFAULT_CODE_COLOR, "")]]
+
+    normalized = code_text.replace("\r\n", "\n").replace("\r", "\n")
+
+    if not PYGMENTS_AVAILABLE:
+        return [[(DEFAULT_CODE_COLOR, line)] for line in normalized.split("\n")]
+
+    lexer = _select_lexer(language, normalized)
+    token_lines: List[List[tuple[colors.Color, str]]] = [[]]
+
+    for token_type, value in lex(normalized, lexer):
+        if value == "":
+            continue
+
+        value = value.replace("\t", "    ")
+        segments = value.split("\n")
+
+        for index, segment in enumerate(segments):
+            if segment:
+                token_lines[-1].append((_color_for_token(token_type), segment))
+            if index < len(segments) - 1:
+                token_lines.append([])
+
+    return token_lines or [[(DEFAULT_CODE_COLOR, "")]]
+
+
+def _build_code_flowable(element: Tag, styles: dict[str, ParagraphStyle]) -> Flowable:
+    code_style = styles["CustomCode"]
+    language = _resolve_code_language(element)
+    code_text = element.get_text().rstrip("\n")
+    token_lines = _tokenize_code(code_text, language)
+    return CodeBlockFlowable(token_lines, code_style)
+
+
 def _render_inline_content(element: Tag) -> str:
     """Return HTML string for inline content of an element."""
     return element.decode_contents(formatter="html")
 
 
 def _render_list_items(
-    list_element: Tag,
-    styles: dict[str, ParagraphStyle],
-    level: int,
-    ordered: bool,
+        list_element: Tag,
+        styles: dict[str, ParagraphStyle],
+        level: int,
+        ordered: bool,
 ) -> List:
     flowables: List = []
     children = list_element.find_all("li", recursive=False)
@@ -148,10 +386,8 @@ def _render_element(element: Tag, styles: dict[str, ParagraphStyle]) -> Iterable
         return
 
     if name == "pre":
-        code_text = element.get_text().rstrip("\n")
-        if code_text:
-            yield Preformatted(code_text, styles["CustomCode"])
-            yield Spacer(1, 0.1 * inch)
+        yield _build_code_flowable(element, styles)
+        yield Spacer(1, 0.1 * inch)
         return
 
     if name == "blockquote":
@@ -181,7 +417,8 @@ def _render_element(element: Tag, styles: dict[str, ParagraphStyle]) -> Iterable
                 rows.append(" | ".join(cells))
         if rows:
             table_text = "\n".join(rows)
-            yield Preformatted(table_text, styles["CustomCode"])
+            token_lines = _tokenize_code(table_text, language=None)
+            yield CodeBlockFlowable(token_lines, styles["CustomCode"])
             yield Spacer(1, 0.1 * inch)
         return
 

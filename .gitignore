@@ -5,6 +5,8 @@
 /asistente-asignatura/ejercicios/**/*.pdf
 /asistente-asignatura/ejercicios/**/*.md
 /asistente-asignatura/ejercicios/**/*.java
+**/.venv/
+**/.env/
 
 
 # PDF2Markdown converter project
