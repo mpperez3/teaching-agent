@@ -16,24 +16,53 @@ fi
 # Activar el environment
 source .venv/bin/activate
 
-# Instalar el proyecto usando pyproject.toml
-if ! python -c "import fitz" 2>/dev/null; then
-    echo "📦 Instalando proyecto con dependencias usando pyproject.toml..."
+# Instalar dependencias de docling
+if ! python -c "from docling.document_converter import DocumentConverter" 2>/dev/null; then
+    echo "📦 Instalando docling y dependencias usando pyproject.toml..."
     pip install --upgrade pip
     pip install -e .
+    echo "📦 Instalando docling directamente por si acaso..."
+    pip install docling>=2.54.0 docling-core>=2.54.0 docling-parse>=2.54.0
 fi
 
 echo "✅ Environment activado correctamente"
 echo "📁 Directorio actual: $(pwd)"
 echo "🐍 Python: $(which python)"
 
-# Si se pasa un argumento, ejecutar el converter
+# Verificar que docling está disponible
+if python -c "from docling.document_converter import DocumentConverter; print('✅ Docling importado correctamente')" 2>/dev/null; then
+    echo "✅ Docling verificado correctamente"
+else
+    echo "❌ Error: Docling no se puede importar"
+    echo "Intentando instalar nuevamente..."
+    pip install --force-reinstall docling docling-core docling-parse
+fi
+
+# Procesar argumentos
 if [ "$1" = "convert" ]; then
     echo ""
     echo "🔄 Ejecutando conversión PDF to Markdown..."
-    python simple_converter.py
+
+    # Pasar argumentos adicionales al converter
+    shift # Remove 'convert' from arguments
+    if [ $# -gt 0 ]; then
+        echo "📝 Argumentos adicionales: $@"
+        python simple_converter.py "$@"
+    else
+        python simple_converter.py
+    fi
+elif [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    echo ""
+    echo "📖 Ayuda del conversor PDF to Markdown:"
+    echo ""
+    python simple_converter.py --help
 else
     echo ""
-    echo "Para convertir PDFs ejecute: ./run_pdf2md.sh convert"
+    echo "Uso del script:"
+    echo "  ./run_pdf2md.sh convert                    # Convertir todos los PDFs"
+    echo "  ./run_pdf2md.sh convert --default-lang java  # Con Java por defecto"
+    echo "  ./run_pdf2md.sh convert -f archivo.pdf     # Convertir archivo específico"
+    echo "  ./run_pdf2md.sh help                       # Ver ayuda completa"
+    echo ""
     echo "Para salir del environment: deactivate"
 fi

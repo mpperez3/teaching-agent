@@ -5,14 +5,161 @@ Converts PDF files to Markdown format with multiple modes:
 - Single file conversion
 - Directory conversion (with subdirectories)
 - Default: all PDFs in base_de_conocimiento directory
+
+Features:
+- Automatic code block detection and formatting
+- Support for multiple programming languages (Java, Python, C++, etc.)
+- Improved markdown formatting for code snippets
 """
 
 import sys
+import re
 from pathlib import Path
 import argparse
 
+def detect_and_format_code(markdown_content):
+    """
+    Detect code blocks in markdown content and improve their formatting
+    """
+    
+    # Patterns to detect code blocks and keywords for different languages
+    code_patterns = {
+        'java': {
+            'keywords': ['public class', 'private', 'protected', 'public static void main', 'import java', 
+                        'extends', 'implements', 'interface', 'enum', 'package', '@Override', 'ArrayList', 
+                        'HashMap', 'String[]', 'System.out.println', 'new ArrayList', 'new HashMap'],
+            'extensions': ['.java'],
+            'indicators': ['class ', 'interface ', 'enum ', 'package ', 'import java.']
+        },
+        'python': {
+            'keywords': ['def ', 'class ', 'import ', 'from ', 'if __name__', 'print(', 'input(', 
+                        'len(', 'range(', 'for ', 'while ', 'try:', 'except:', 'finally:', 'with ',
+                        'lambda ', 'yield ', 'return ', 'elif ', 'pass', 'break', 'continue'],
+            'extensions': ['.py'],
+            'indicators': ['def ', 'class ', 'import ', 'from ', 'if __name__']
+        },
+        'cpp': {
+            'keywords': ['#include', 'using namespace', 'int main(', 'class ', 'struct ', 'cout <<', 
+                        'cin >>', 'std::', 'vector<', 'string', 'iostream', 'algorithm'],
+            'extensions': ['.cpp', '.h', '.hpp'],
+            'indicators': ['#include', 'using namespace', 'int main(', 'std::']
+        },
+        'c': {
+            'keywords': ['#include', 'int main(', 'printf(', 'scanf(', 'malloc(', 'free(', 'struct ',
+                        'typedef', 'sizeof(', 'NULL', 'stdio.h', 'stdlib.h'],
+            'extensions': ['.c', '.h'],
+            'indicators': ['#include', 'int main(', 'printf(', 'scanf(']
+        },
+        'javascript': {
+            'keywords': ['function ', 'var ', 'let ', 'const ', 'console.log', 'document.', 'window.',
+                        'addEventListener', 'querySelector', 'getElementById', '=>', 'async ', 'await '],
+            'extensions': ['.js'],
+            'indicators': ['function ', 'console.log', 'document.', '=>']
+        },
+        'sql': {
+            'keywords': ['SELECT', 'FROM', 'WHERE', 'INSERT', 'UPDATE', 'DELETE', 'CREATE TABLE',
+                        'DROP TABLE', 'ALTER TABLE', 'JOIN', 'INNER JOIN', 'LEFT JOIN'],
+            'extensions': ['.sql'],
+            'indicators': ['SELECT ', 'FROM ', 'INSERT ', 'UPDATE ', 'DELETE ', 'CREATE TABLE']
+        }
+    }
+    
+    def detect_language(text_block):
+        """Detect the programming language of a text block"""
+        text_lower = text_block.lower()
+        scores = {}
+        
+        for lang, patterns in code_patterns.items():
+            score = 0
+            # Check for strong indicators first
+            for indicator in patterns['indicators']:
+                if indicator.lower() in text_lower:
+                    score += 10
+
+            # Check for keywords
+            for keyword in patterns['keywords']:
+                if keyword.lower() in text_lower:
+                    score += 1
+
+            scores[lang] = score
+        
+        # Return language with highest score, or None if no significant match
+        max_score = max(scores.values()) if scores else 0
+        if max_score >= 3:  # Minimum threshold for language detection
+            return max(scores, key=scores.get)
+        return None
+    
+    def is_likely_code(text):
+        """Determine if a text block is likely to contain code"""
+        # Check for common code indicators
+        code_indicators = [
+            r'\{[^}]*\}',  # Curly braces
+            r'\([^)]*\)[^a-zA-Z]',  # Function calls
+            r'[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*[^=]',  # Variable assignments
+            r'//.*|/\*.*\*/',  # Comments
+            r'#.*',  # Hash comments (Python, C preprocessor)
+            r'public\s+class\s+\w+',  # Java class declaration
+            r'def\s+\w+\s*\(',  # Python function definition
+            r'#include\s*<.*>',  # C/C++ includes
+            r'console\.log\s*\(',  # JavaScript console.log
+            r'System\.out\.println\s*\(',  # Java print
+            r'print\s*\(',  # Python print
+            r'SELECT\s+.*\s+FROM',  # SQL select
+        ]
+        
+        # Count matches
+        matches = sum(1 for pattern in code_indicators if re.search(pattern, text, re.IGNORECASE))
+
+        # Also check for indentation patterns (common in code)
+        lines = text.split('\n')
+        indented_lines = sum(1 for line in lines if line.startswith('    ') or line.startswith('\t'))
+
+        return matches >= 2 or (matches >= 1 and indented_lines > len(lines) * 0.3)
+
+    # Process the markdown content
+    lines = markdown_content.split('\n')
+    processed_lines = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if we're starting a potential code block
+        if line.strip() and not line.startswith('#') and not line.startswith('*') and not line.startswith('-'):
+            # Look ahead to see if this could be a code block
+            block_lines = []
+            j = i
+
+            # Collect consecutive non-empty lines that might be code
+            while j < len(lines) and lines[j].strip():
+                block_lines.append(lines[j])
+                j += 1
+
+            if len(block_lines) >= 2:  # At least 2 lines to consider as code block
+                block_text = '\n'.join(block_lines)
+
+                if is_likely_code(block_text):
+                    # Detect the language
+                    detected_lang = detect_language(block_text)
+
+                    # Format as code block
+                    lang_tag = detected_lang if detected_lang else ''
+                    processed_lines.append(f'```{lang_tag}')
+                    processed_lines.extend(block_lines)
+                    processed_lines.append('```')
+                    processed_lines.append('')  # Add empty line after code block
+
+                    i = j  # Skip processed lines
+                    continue
+
+        # If not processed as code block, add line normally
+        processed_lines.append(line)
+        i += 1
+    
+    return '\n'.join(processed_lines)
+
 def simple_pdf_to_markdown(pdf_path):
-    """Convert PDF to markdown using docling"""
+    """Convert PDF to markdown using docling with code formatting"""
     try:
         from docling.document_converter import DocumentConverter
 
@@ -23,9 +170,12 @@ def simple_pdf_to_markdown(pdf_path):
         result = converter.convert(str(pdf_path))
 
         # Export to markdown
-        markdown_content = result.document.export_to_markdown()
+        raw_markdown = result.document.export_to_markdown()
+        
+        # Apply code detection and formatting
+        formatted_markdown = detect_and_format_code(raw_markdown)
 
-        return markdown_content
+        return formatted_markdown
 
     except ImportError as e:
         return f"# {pdf_path.stem}\n\n*Error: docling libraries not available. Please install with: pip install docling*\n*Import error: {str(e)}*\n"
@@ -98,7 +248,7 @@ def convert_directory_pdfs(directory_path):
 
             # Generate markdown content
             markdown_content = simple_pdf_to_markdown(pdf_file)
-            
+
             # Write to .md file in same directory
             md_file = pdf_file.with_suffix(".md")
             
