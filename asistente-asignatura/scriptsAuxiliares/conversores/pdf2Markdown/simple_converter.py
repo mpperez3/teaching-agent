@@ -14,6 +14,7 @@ Features:
 
 import sys
 import re
+import textwrap
 from pathlib import Path
 import argparse
 
@@ -121,41 +122,85 @@ def detect_and_format_code(markdown_content):
     processed_lines = []
     i = 0
 
+    def normalize_block(block):
+        """Normalize indentation within a detected code block."""
+        stripped_block = [line.rstrip('\r') for line in block]
+        indents = []
+        for line in stripped_block:
+            if not line.strip():
+                continue
+            leading_spaces = len(line) - len(line.lstrip(' '))
+            leading_tabs = len(line) - len(line.lstrip('\t'))
+            if leading_tabs:
+                indents.append(0)
+            else:
+                indents.append(leading_spaces)
+        if indents:
+            min_indent = min(indents)
+            normalized = [line[min_indent:] if len(line) >= min_indent else line for line in stripped_block]
+        else:
+            normalized = stripped_block
+        # Dedent text to remove accidental leading indentation while preserving structure
+        dedented = textwrap.dedent('\n'.join(normalized)).split('\n')
+        return [line.rstrip() for line in dedented]
+
     while i < len(lines):
         line = lines[i]
-        
+        stripped = line.strip()
+
+        # Preserve existing fenced code blocks without modifications
+        if stripped.startswith('```'):
+            processed_lines.append(line)
+            i += 1
+            while i < len(lines):
+                processed_lines.append(lines[i])
+                if lines[i].strip().startswith('```'):
+                    i += 1
+                    break
+                i += 1
+            continue
+
         # Check if we're starting a potential code block
-        if line.strip() and not line.startswith('#') and not line.startswith('*') and not line.startswith('-'):
-            # Look ahead to see if this could be a code block
+        if stripped and not stripped.startswith('#') and not stripped.startswith('*') and not stripped.startswith('-') and not stripped.startswith('>'):
             block_lines = []
             j = i
 
-            # Collect consecutive non-empty lines that might be code
-            while j < len(lines) and lines[j].strip():
-                block_lines.append(lines[j])
+            # Collect consecutive non-empty lines that might be code, stopping at existing markdown constructs
+            while j < len(lines):
+                candidate = lines[j]
+                candidate_stripped = candidate.strip()
+                if not candidate_stripped:
+                    break
+                if candidate_stripped.startswith('```'):
+                    block_lines = []
+                    break
+                if candidate_stripped.startswith('#'):
+                    break
+                block_lines.append(candidate)
                 j += 1
 
-            if len(block_lines) >= 2:  # At least 2 lines to consider as code block
+            if len(block_lines) >= 2:
                 block_text = '\n'.join(block_lines)
 
                 if is_likely_code(block_text):
-                    # Detect the language
                     detected_lang = detect_language(block_text)
-
-                    # Format as code block
                     lang_tag = detected_lang if detected_lang else ''
-                    processed_lines.append(f'```{lang_tag}')
-                    processed_lines.extend(block_lines)
-                    processed_lines.append('```')
-                    processed_lines.append('')  # Add empty line after code block
+                    normalized_block = normalize_block(block_lines)
 
-                    i = j  # Skip processed lines
+                    if processed_lines and processed_lines[-1].strip():
+                        processed_lines.append('')
+
+                    processed_lines.append(f'```{lang_tag}')
+                    processed_lines.extend(normalized_block)
+                    processed_lines.append('```')
+                    processed_lines.append('')
+
+                    i = j
                     continue
 
-        # If not processed as code block, add line normally
-        processed_lines.append(line)
+        processed_lines.append(line.rstrip())
         i += 1
-    
+
     return '\n'.join(processed_lines)
 
 def simple_pdf_to_markdown(pdf_path):
