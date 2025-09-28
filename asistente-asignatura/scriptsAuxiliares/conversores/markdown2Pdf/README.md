@@ -34,7 +34,7 @@ markdown2Pdf/
 - **Conversión recursiva** de todos los Markdown en un directorio y subdirectorios.
 - **Modo archivo único** para convertir solo un `.md`.
 - **Renderizado profesional** con tipografía moderna, encabezados y pies de página automáticos.
-- **Resaltado de sintaxis** basado en *Pygments* para bloques de código (incluye Java, Python, C y más).
+- **Bloques de código enriquecidos** con resaltado diferenciado por lenguaje (Python, Java, C/C++ y más), numeración de líneas y etiquetas visibles.
 - **Soporte completo** para tablas, listas y citas con estilos coherentes.
 - **Salida en la misma carpeta** que el Markdown origen, con la misma ruta relativa.
 - **Environment aislado** que no interfiere con otras instalaciones Python.

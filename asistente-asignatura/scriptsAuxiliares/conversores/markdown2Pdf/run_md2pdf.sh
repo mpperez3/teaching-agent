@@ -27,7 +27,7 @@ python - <<'PYCODE'
 try:
     import markdown  # noqa: F401
     import bs4  # noqa: F401
-    import reportlab  # noqa: F401
+    import weasyprint  # noqa: F401
     print("✅ Dependencias verificadas correctamente")
 except Exception as exc:  # pragma: no cover - ejecución manual
     print(f"❌ Error al verificar dependencias: {exc}")
