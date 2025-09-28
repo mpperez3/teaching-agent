@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markdown2pdf-simple"
+version = "1.0.0"
+description = "Conversor sencillo de Markdown a PDF para el proyecto teaching-agent"
+requires-python = ">=3.10"
+dependencies = [
+    "markdown>=3.4",
+    "beautifulsoup4>=4.12",
+    "reportlab>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+md2pdf = "simple_converter:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
+[tool.setuptools]
+py-modules = ["simple_converter"]
