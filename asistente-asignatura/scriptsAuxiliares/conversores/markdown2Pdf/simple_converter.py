@@ -1,471 +1,314 @@
 #!/usr/bin/env python3
-"""
-Markdown to PDF converter for the teaching assistant project.
-
-The converter focuses on producing readable PDFs from Markdown notes
-while preserving headings, lists and code blocks with appropriate
-formatting.
-"""
+"""Conversor avanzado de Markdown a PDF para el proyecto teaching-agent."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+from html import escape
 from pathlib import Path
-from typing import Iterable, List, Optional
 
-from bs4 import BeautifulSoup, NavigableString, Tag
 from markdown import markdown
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.pdfbase import pdfmetrics
-from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer
-
-try:  # Syntax highlighting is optional
-    from pygments import lex
-    from pygments.lexers import TextLexer, get_lexer_by_name, guess_lexer
-    from pygments.token import Token
-    from pygments.util import ClassNotFound
-
-    PYGMENTS_AVAILABLE = True
-except ImportError:  # pragma: no cover - optional dependency
-    PYGMENTS_AVAILABLE = False
-    Token = None  # type: ignore
-
-
-def _create_styles() -> dict[str, ParagraphStyle]:
-    styles = getSampleStyleSheet()
-
-    styles.add(
-        ParagraphStyle(
-            name="Body",
-            parent=styles["BodyText"],
-            fontSize=11,
-            leading=14,
-        )
-    )
-
-    styles.add(
-        ParagraphStyle(
-            name="CustomCode",
-            fontName="Courier",
-            fontSize=9,
-            leading=11,
-            leftIndent=12,
-            rightIndent=12,
-            backColor=colors.HexColor("#f6f8fa"),
-            borderColor=colors.lightgrey,
-            borderWidth=0.25,
-            borderPadding=6,
-            spaceBefore=6,
-            spaceAfter=6,
-            textColor=colors.HexColor("#2f2f2f"),
-        )
-    )
-
-    styles.add(
-        ParagraphStyle(
-            name="BlockQuote",
-            parent=styles["Body"],
-            leftIndent=18,
-            textColor=colors.HexColor("#444444"),
-            spaceBefore=6,
-            spaceAfter=6,
-            italic=True,
-        )
-    )
-
-    # Indentation levels for unordered/ordered lists
-    for level in range(4):
-        indent = 18 + level * 12
-        styles.add(
-            ParagraphStyle(
-                name=f"ListLevel{level}",
-                parent=styles["Body"],
-                leftIndent=indent,
-                bulletIndent=indent - 9,
-                spaceBefore=2,
-                spaceAfter=2,
-            )
-        )
-
-    return styles
-
-
-DEFAULT_CODE_COLOR = colors.HexColor("#2f2f2f")
-
-if PYGMENTS_AVAILABLE:
-    TOKEN_COLOR_MAP = [
-        (Token.Comment, colors.HexColor("#6a737d")),
-        (Token.Keyword, colors.HexColor("#d73a49")),
-        (Token.Operator, colors.HexColor("#d73a49")),
-        (Token.Name.Function, colors.HexColor("#005cc5")),
-        (Token.Name.Class, colors.HexColor("#6f42c1")),
-        (Token.Name.Builtin, colors.HexColor("#005cc5")),
-        (Token.Name.Decorator, colors.HexColor("#6f42c1")),
-        (Token.Literal.String, colors.HexColor("#032f62")),
-        (Token.Literal.Number, colors.HexColor("#005cc5")),
-        (Token.Name.Attribute, colors.HexColor("#24292e")),
-        (Token.Punctuation, colors.HexColor("#24292e")),
-    ]
-else:  # pragma: no cover - sin pygments
-    TOKEN_COLOR_MAP = []
-
-
-class CodeBlockFlowable(Flowable):
-    """Render code blocks with optional syntax highlighting and soft wrapping."""
-
-    def __init__(
-        self,
-        token_lines: List[List[tuple[colors.Color, str]]],
-        style: ParagraphStyle,
-    ) -> None:
-        super().__init__()
-        self._original_lines = token_lines or [[(DEFAULT_CODE_COLOR, "")]]
-        self.style = style
-        self._wrapped_lines: List[List[tuple[colors.Color, str]]] = []
-        self._available_width: Optional[float] = None
-        self._content_width: float = 0.0
-        self._block_width: float = 0.0
-        self._line_height: float = float(style.leading or (style.fontSize * 1.2))
-        self._padding: float = float(getattr(style, "borderPadding", 4))
-        self._border_width: float = float(getattr(style, "borderWidth", 0))
-        self.height: float = 0.0
-
-    def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:
-        if availWidth != self._available_width:
-            self._layout_lines(availWidth)
-        return availWidth, self.height
-
-    def _layout_lines(self, avail_width: float) -> None:
-        self._available_width = avail_width
-        left_indent = float(getattr(self.style, "leftIndent", 0))
-        right_indent = float(getattr(self.style, "rightIndent", 0))
-        usable_width = max(avail_width - left_indent - right_indent, 12.0)
-        inner_width = max(usable_width - 2 * self._padding, 4.0)
-
-        char_width = pdfmetrics.stringWidth("M", self.style.fontName, self.style.fontSize)
-        max_chars = max(1, int(inner_width // max(char_width, 0.1)))
-
-        wrapped_lines: List[List[tuple[colors.Color, str]]] = []
-        for line_tokens in self._original_lines:
-            wrapped_lines.extend(self._wrap_line_tokens(line_tokens, max_chars))
-
-        if not wrapped_lines:
-            wrapped_lines = [[(DEFAULT_CODE_COLOR, "")]]
-
-        self._wrapped_lines = wrapped_lines
-        self._content_width = inner_width
-        self._block_width = inner_width + 2 * self._padding
-        line_count = len(self._wrapped_lines)
-        content_height = max(1, line_count) * self._line_height
-        self.height = content_height + 2 * self._padding + 2 * self._border_width
-
-    def _wrap_line_tokens(
-        self,
-        line_tokens: List[tuple[colors.Color, str]],
-        max_chars: int,
-    ) -> List[List[tuple[colors.Color, str]]]:
-        if not line_tokens:
-            return [[]]
-
-        wrapped: List[List[tuple[colors.Color, str]]] = []
-        current_line: List[tuple[colors.Color, str]] = []
-        current_length = 0
-
-        for color, segment in line_tokens:
-            text = segment.replace("\t", "    ")
-            while text:
-                remaining = max_chars - current_length
-                if remaining <= 0:
-                    wrapped.append(current_line)
-                    current_line = []
-                    current_length = 0
-                    remaining = max_chars
-
-                chunk = text[:remaining]
-                current_line.append((color, chunk))
-                current_length += len(chunk)
-                text = text[remaining:]
-
-                if text:
-                    wrapped.append(current_line)
-                    current_line = []
-                    current_length = 0
-
-        wrapped.append(current_line)
-        return wrapped
-
-    def draw(self) -> None:  # pragma: no cover - rendering
-        canvas = self.canv
-        canvas.saveState()
-
-        left_indent = float(getattr(self.style, "leftIndent", 0))
-        padding = self._padding
-        block_x = left_indent
-        block_y = 0
-        block_height = self.height
-        block_width = self._block_width
-
-        back_color = self.style.backColor or colors.whitesmoke
-        border_color = self.style.borderColor or colors.transparent
-
-        canvas.setFillColor(back_color)
-        canvas.setStrokeColor(back_color)
-        canvas.rect(block_x, block_y, block_width, block_height, stroke=0, fill=1)
-
-        if self._border_width > 0:
-            canvas.setLineWidth(self._border_width)
-            canvas.setStrokeColor(border_color)
-            canvas.rect(block_x, block_y, block_width, block_height, stroke=1, fill=0)
-
-        text_x_start = block_x + padding
-        baseline = block_height - padding - self.style.fontSize
-
-        font_name = self.style.fontName
-        font_size = self.style.fontSize
-        canvas.setFont(font_name, font_size)
-
-        default_color = getattr(self.style, "textColor", DEFAULT_CODE_COLOR)
-
-        for line in self._wrapped_lines:
-            x_cursor = text_x_start
-            if line:
-                for color, segment in line:
-                    canvas.setFillColor(color or default_color)
-                    canvas.drawString(x_cursor, baseline, segment)
-                    segment_width = pdfmetrics.stringWidth(segment, font_name, font_size)
-                    x_cursor += segment_width
-            baseline -= self._line_height
-
-        canvas.restoreState()
-
-
-def _color_for_token(token_type) -> colors.Color:
-    if not PYGMENTS_AVAILABLE or token_type is None:
-        return DEFAULT_CODE_COLOR
-    for candidate, color in TOKEN_COLOR_MAP:
-        if token_type in candidate:
-            return color
-    return DEFAULT_CODE_COLOR
-
-
-def _resolve_code_language(element: Tag) -> Optional[str]:
-    code_tag = element.find("code")
-    if not code_tag:
-        return None
-
-    class_attr = code_tag.get("class", [])
-    if isinstance(class_attr, str):
-        class_attr = [class_attr]
-
-    for class_name in class_attr:
-        if class_name.startswith("language-"):
-            return class_name[len("language-") :]
-    return None
-
-
-def _select_lexer(language: Optional[str], code_text: str):  # pragma: no cover - small wrapper
-    if not PYGMENTS_AVAILABLE:
-        raise RuntimeError("Pygments no disponible")
-
-    if language:
-        try:
-            return get_lexer_by_name(language)
-        except ClassNotFound:
-            pass
-
-    try:
-        return guess_lexer(code_text)
-    except ClassNotFound:
-        return TextLexer()
-
-
-def _tokenize_code(code_text: str, language: Optional[str]) -> List[List[tuple[colors.Color, str]]]:
-    if not code_text:
-        return [[(DEFAULT_CODE_COLOR, "")]]
-
-    normalized = code_text.replace("\r\n", "\n").replace("\r", "\n")
-
-    if not PYGMENTS_AVAILABLE:
-        return [[(DEFAULT_CODE_COLOR, line)] for line in normalized.split("\n")]
-
-    lexer = _select_lexer(language, normalized)
-    token_lines: List[List[tuple[colors.Color, str]]] = [[]]
-
-    for token_type, value in lex(normalized, lexer):
-        if value == "":
-            continue
-
-        value = value.replace("\t", "    ")
-        segments = value.split("\n")
-
-        for index, segment in enumerate(segments):
-            if segment:
-                token_lines[-1].append((_color_for_token(token_type), segment))
-            if index < len(segments) - 1:
-                token_lines.append([])
-
-    return token_lines or [[(DEFAULT_CODE_COLOR, "")]]
-
-
-def _build_code_flowable(element: Tag, styles: dict[str, ParagraphStyle]) -> Flowable:
-    code_style = styles["CustomCode"]
-    language = _resolve_code_language(element)
-    code_text = element.get_text().rstrip("\n")
-    token_lines = _tokenize_code(code_text, language)
-    return CodeBlockFlowable(token_lines, code_style)
-
-
-def _render_inline_content(element: Tag) -> str:
-    """Return HTML string for inline content of an element."""
-    return element.decode_contents(formatter="html")
-
-
-def _render_list_items(
-        list_element: Tag,
-        styles: dict[str, ParagraphStyle],
-        level: int,
-        ordered: bool,
-) -> List:
-    flowables: List = []
-    children = list_element.find_all("li", recursive=False)
-
-    for index, item in enumerate(children, start=1):
-        bullet = f"{index}." if ordered else "•"
-        content_parts = []
-        for child in item.contents:
-            if isinstance(child, NavigableString):
-                content_parts.append(str(child))
-            elif isinstance(child, Tag) and child.name not in {"ul", "ol"}:
-                content_parts.append(child.decode(formatter="html"))
-        text = "".join(content_parts).strip() or "&nbsp;"
-        style_name = f"ListLevel{min(level, 3)}"
-        flowables.append(Paragraph(text, styles[style_name], bulletText=bullet))
-
-        # Handle nested lists recursively
-        for child in item.contents:
-            if isinstance(child, Tag) and child.name in {"ul", "ol"}:
-                flowables.extend(
-                    _render_list_items(
-                        child,
-                        styles,
-                        level + 1,
-                        ordered=(child.name == "ol"),
-                    )
-                )
-    flowables.append(Spacer(1, 0.08 * inch))
-    return flowables
-
-
-def _render_element(element: Tag, styles: dict[str, ParagraphStyle]) -> Iterable:
-    name = element.name
-
-    if name is None:
-        text = str(element).strip()
-        if text:
-            yield Paragraph(text, styles["Body"])
-            yield Spacer(1, 0.08 * inch)
-        return
-
-    if name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-        heading_level = int(name[1])
-        heading_style = styles.get(f"Heading{min(heading_level, 3)}", styles["Heading1"])
-        text = element.get_text(strip=True)
-        yield Paragraph(text, heading_style)
-        yield Spacer(1, 0.12 * inch)
-        return
-
-    if name == "p":
-        content = _render_inline_content(element).strip()
-        if content:
-            yield Paragraph(content, styles["Body"])
-            yield Spacer(1, 0.08 * inch)
-        return
-
-    if name == "pre":
-        yield _build_code_flowable(element, styles)
-        yield Spacer(1, 0.1 * inch)
-        return
-
-    if name == "blockquote":
-        text = _render_inline_content(element).strip()
-        if text:
-            yield Paragraph(text, styles["BlockQuote"])
-            yield Spacer(1, 0.08 * inch)
-        return
-
-    if name == "ul":
-        yield from _render_list_items(element, styles, level=0, ordered=False)
-        return
-
-    if name == "ol":
-        yield from _render_list_items(element, styles, level=0, ordered=True)
-        return
-
-    if name == "hr":
-        yield Spacer(1, 0.15 * inch)
-        return
-
-    if name == "table":
-        rows = []
-        for row in element.find_all("tr"):
-            cells = [cell.get_text(" ", strip=True) for cell in row.find_all(["td", "th"])]
-            if cells:
-                rows.append(" | ".join(cells))
-        if rows:
-            table_text = "\n".join(rows)
-            token_lines = _tokenize_code(table_text, language=None)
-            yield CodeBlockFlowable(token_lines, styles["CustomCode"])
-            yield Spacer(1, 0.1 * inch)
-        return
-
-    # Fallback: render children sequentially
-    for child in element.children:
-        if isinstance(child, (Tag, NavigableString)):
-            yield from _render_element(child, styles)
-
-
-def markdown_to_flowables(markdown_text: str) -> List:
-    html = markdown(
+from pygments.formatters import HtmlFormatter
+from weasyprint import CSS, HTML
+
+
+BASE_CSS = """
+@page {
+    size: A4;
+    margin: 2.4cm 2.0cm 2.6cm 2.0cm;
+    @bottom-right {
+        content: "Página " counter(page) " de " counter(pages);
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 9pt;
+        color: #6b7280;
+    }
+    @top-left {
+        content: string(doc-title);
+        font-weight: 600;
+        font-size: 10pt;
+        color: #4b5563;
+    }
+}
+
+html {
+    font-size: 12pt;
+}
+
+body {
+    color: #1f2933;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    background: #ffffff;
+    string-set: doc-title attr(data-title);
+}
+
+body, h1, h2, h3, h4, h5, h6, p {
+    margin: 0;
+    padding: 0;
+}
+
+article.document {
+    display: block;
+    width: 100%;
+}
+
+.document__header {
+    margin-bottom: 1.2rem;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 0.8rem;
+}
+
+.document__header h1 {
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+h1 {
+    margin: 0 0 0.8rem 0;
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.015em;
+    string-set: doc-title content();
+}
+
+h2 {
+    margin: 1.4rem 0 0.6rem 0;
+    font-size: 1.55rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+h3 {
+    margin: 1.2rem 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+h4, h5, h6 {
+    margin: 1rem 0 0.4rem 0;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+p {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+}
+
+strong {
+    color: #111827;
+    font-weight: 600;
+}
+
+em {
+    color: #374151;
+}
+
+ul, ol {
+    margin: 0 0 0.75rem 1.2rem;
+    padding-left: 0.4rem;
+}
+
+li {
+    margin-bottom: 0.35rem;
+    font-size: 1rem;
+}
+
+li::marker {
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+blockquote {
+    margin: 0.9rem 0;
+    padding: 0.6rem 1rem;
+    border-left: 4px solid #3b82f6;
+    background: #f8fafc;
+    color: #374151;
+    font-style: italic;
+}
+
+code {
+    font-family: 'Fira Code', 'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
+    background: #f3f4f6;
+    padding: 0.08rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+}
+
+pre code {
+    padding: 0;
+    background: transparent;
+    font-size: 0.95rem;
+}
+
+.codehilite {
+    margin: 1rem 0 1.3rem 0;
+    padding: 1rem 1.1rem;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.codehilite pre {
+    margin: 0;
+    overflow-wrap: normal;
+    white-space: pre;
+}
+
+.codehilite::-webkit-scrollbar {
+    height: 6px;
+}
+
+.codehilite::-webkit-scrollbar-thumb {
+    background: #9ca3af;
+    border-radius: 3px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0;
+    font-size: 0.97rem;
+}
+
+th, td {
+    border: 1px solid #d1d5db;
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+}
+
+th {
+    background: #f3f4f6;
+    color: #111827;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.035em;
+}
+
+tr:nth-child(even) td {
+    background: #f9fafb;
+}
+
+a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+img {
+    max-width: 100%;
+    display: block;
+    margin: 1rem auto;
+    border-radius: 8px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #d1d5db;
+    margin: 1.5rem 0;
+}
+
+.toc {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #f9fafb;
+    margin: 1.5rem 0;
+}
+
+.toc ul {
+    margin: 0.4rem 0 0 1.1rem;
+}
+
+.toc li {
+    margin-bottom: 0.25rem;
+}
+"""
+
+
+def _build_stylesheet() -> str:
+    formatter = HtmlFormatter(style="friendly", linenos=False)
+    highlight_css = formatter.get_style_defs(".codehilite")
+    # Ajustes adicionales para un contraste equilibrado.
+    extra_code_css = """
+.codehilite .hll { background-color: #fef3c7; }
+.codehilite span { font-size: 0.95rem; }
+"""
+    return "\n".join([BASE_CSS.strip(), highlight_css, extra_code_css.strip()])
+
+
+def _build_html_document(markdown_text: str, title: str, stylesheet: str) -> str:
+    html_body = markdown(
         markdown_text,
         extensions=[
             "fenced_code",
+            "codehilite",
             "tables",
+            "toc",
             "sane_lists",
         ],
+        extension_configs={
+            "codehilite": {
+                "guess_lang": True,
+                "noclasses": False,
+                "pygments_style": "friendly",
+                "linenums": False,
+            },
+            "toc": {"permalink": "#"},
+        },
     )
-    soup = BeautifulSoup(html, "html.parser")
-    styles = _create_styles()
 
-    flowables: List = []
-    for element in soup.contents:
-        if isinstance(element, (Tag, NavigableString)):
-            flowables.extend(list(_render_element(element, styles)))
+    safe_title = escape(title)
+    return f"""<!DOCTYPE html>
+<html lang=\"es\">
+<head>
+    <meta charset=\"utf-8\">
+    <title>{safe_title}</title>
+    <style>
+    {stylesheet}
+    </style>
+</head>
+<body data-title=\"{safe_title}\">
+    <article class=\"document\">
+        <div class=\"document__header\">
+            <h1>{safe_title}</h1>
+        </div>
+        <div class=\"document__content\">
+            {html_body}
+        </div>
+    </article>
+</body>
+</html>"""
 
-    if not flowables:
-        flowables.append(Paragraph("(Documento sin contenido)", styles["Body"]))
 
-    return flowables
+def _infer_title(markdown_text: str, fallback: str) -> str:
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("# ").strip() or fallback
+    return fallback
 
 
 def convert_markdown_to_pdf(markdown_path: Path) -> Path:
     markdown_text = markdown_path.read_text(encoding="utf-8")
-    flowables = markdown_to_flowables(markdown_text)
+    title = _infer_title(markdown_text, markdown_path.stem)
+    stylesheet = _build_stylesheet()
+    html_document = _build_html_document(markdown_text, title, stylesheet)
 
     output_path = markdown_path.with_suffix(".pdf")
-    document = SimpleDocTemplate(
-        str(output_path),
-        pagesize=A4,
-        leftMargin=0.9 * inch,
-        rightMargin=0.9 * inch,
-        topMargin=1.0 * inch,
-        bottomMargin=1.0 * inch,
-        title=markdown_path.stem,
+    HTML(string=html_document, base_url=str(markdown_path.parent)).write_pdf(
+        str(output_path), stylesheets=[CSS(string=stylesheet)]
     )
-    document.build(flowables)
 
     return output_path
 
@@ -529,7 +372,7 @@ def convert_directory_markdowns(directory: Path) -> tuple[int, int]:
 
 def convert_all_markdowns() -> tuple[int, int]:
     script_dir = Path(__file__).parent
-    base_path = script_dir.parent.parent.parent / "enunciados_sinteticos"
+    base_path = script_dir.parent.parent.parent / "ejercicios" / "enunciados_sinteticos"
     if not base_path.exists():
         print(f"Error: La ruta base {base_path} no existe")
         return 0, 0
