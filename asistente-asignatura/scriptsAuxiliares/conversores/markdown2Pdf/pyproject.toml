@@ -1,14 +1,12 @@
 [tool.poetry]
 name = "markdown2pdf-simple"
-version = "1.0.0"
-description = "Conversor sencillo de Markdown a PDF para el proyecto teaching-agent"
+package-mode = false
+version = "1.1.0"
+description = "Conversor de Markdown del proyecto teaching-agent usando Pandoc"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-beautifulsoup4 = ">=4.12"
-markdown = ">=3.4"
-pygments = ">=2.15"
-weasyprint = ">=58.0"
+weasyprint = ">=59.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.0.0"
