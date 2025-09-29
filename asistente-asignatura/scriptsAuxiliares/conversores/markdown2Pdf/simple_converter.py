@@ -1,526 +1,121 @@
 #!/usr/bin/env python3
-"""Conversor avanzado de Markdown a PDF para el proyecto teaching-agent."""
+"""Conversor de Markdown usando Pandoc.
+
+Este script proporciona una interfaz conveniente sobre Pandoc para transformar
+archivos Markdown en PDF y/o DOCX. Aprovecha el estilo de resaltado de Pandoc
+(`pandoc --print-highlight-style`) para evitar mantener hojas de estilo a mano
+mientras conserva la funcionalidad previa de trabajar con archivos sueltos o
+carpetas completas dentro del proyecto teaching-agent.
+"""
 
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
-from html import escape
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
-from bs4 import BeautifulSoup
-from markdown import markdown
-from pygments.formatters import HtmlFormatter
-from weasyprint import CSS, HTML
+DEFAULT_HIGHLIGHT = "pygments"
+HIGHLIGHT_FILE = Path(__file__).with_name("pandoc-highlight.theme")
+SUPPORTED_FORMATS = {"pdf", "docx"}
 
 
-BASE_CSS = """
-@page {
-    size: A4;
-    margin: 2.4cm 2.0cm 2.6cm 2.0cm;
-    @bottom-right {
-        content: "Página " counter(page) " de " counter(pages);
-        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-        font-size: 9pt;
-        color: #6b7280;
-    }
-    @top-left {
-        content: string(doc-title);
-        font-weight: 600;
-        font-size: 10pt;
-        color: #4b5563;
-    }
-}
+class ConversionError(RuntimeError):
+    """Error específico de conversión."""
 
-:root {
-    --color-primary: #2563eb;
-    --color-secondary: #4b5563;
-    --color-muted: #6b7280;
-    --border-color: #d1d5db;
-    --background-soft: #f8fafc;
-    --font-base: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'Fira Code', 'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
-}
 
-html {
-    font-size: 12pt;
-}
+def _run_command(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    """Ejecuta un comando y devuelve el resultado si todo va bien."""
 
-body {
-    color: #1f2933;
-    font-family: var(--font-base);
-    font-size: 1rem;
-    line-height: 1.65;
-    background: #ffffff;
-    string-set: doc-title attr(data-title);
-}
+    try:
+        completed = subprocess.run(
+            list(command),
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - depende del entorno
+        raise ConversionError(
+            f"No se encontró el comando requerido: {command[0]}"
+        ) from exc
+    except subprocess.CalledProcessError as exc:  # pragma: no cover - ejecución manual
+        stderr = exc.stderr.strip() if exc.stderr else ""
+        stdout = exc.stdout.strip() if exc.stdout else ""
+        details = "\n".join(filter(None, [stdout, stderr]))
+        raise ConversionError(
+            f"La ejecución de '{command[0]}' falló con código {exc.returncode}."
+            + (f"\n{details}" if details else "")
+        ) from exc
 
-body, h1, h2, h3, h4, h5, h6, p {
-    margin: 0;
-    padding: 0;
-}
+    return completed
 
-article.document {
-    display: block;
-    width: 100%;
-}
 
-.document__header {
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: 1rem;
-}
+def ensure_pandoc() -> None:
+    """Comprueba que Pandoc esté disponible."""
 
-.document__header h1 {
-    font-size: 2.25rem;
-    font-weight: 700;
-    color: #0f172a;
-}
+    result = _run_command(["pandoc", "--version"])
+    headline = result.stdout.splitlines()[0]
+    print(f"🛠  Usando {headline}")
 
-h1 {
-    margin: 0 0 1rem 0;
-    font-size: 2.25rem;
-    font-weight: 700;
-    color: #0f172a;
-    letter-spacing: -0.015em;
-    string-set: doc-title content();
-    page-break-after: avoid;
-}
 
-h2 {
-    margin: 1.6rem 0 0.7rem 0;
-    font-size: 1.65rem;
-    font-weight: 600;
-    color: #111827;
-    page-break-after: avoid;
-}
+def ensure_weasyprint() -> None:
+    """Comprueba que WeasyPrint (CLI) esté disponible."""
 
-h3 {
-    margin: 1.35rem 0 0.55rem 0;
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #111827;
-    page-break-after: avoid;
-}
+    result = _run_command(["weasyprint", "--version"])
+    headline = result.stdout.splitlines()[0]
+    print(f"🛠  Usando {headline}")
 
-h4, h5, h6 {
-    margin: 1.2rem 0 0.45rem 0;
-    font-weight: 600;
-    color: #1f2937;
-    page-break-after: avoid;
-}
 
-p {
-    margin: 0 0 0.85rem 0;
-    font-size: 1rem;
-}
+def ensure_highlight_style(style_name: str = DEFAULT_HIGHLIGHT) -> Path:
+    """Genera (si es necesario) el archivo de estilo de resaltado de Pandoc."""
 
-strong {
-    color: #111827;
-    font-weight: 650;
-}
+    if HIGHLIGHT_FILE.exists():
+        return HIGHLIGHT_FILE
 
-em {
-    color: #374151;
-}
+    print(f"🎨 Creando estilo de resaltado '{style_name}' con Pandoc...")
+    result = _run_command(["pandoc", "--print-highlight-style", style_name])
+    HIGHLIGHT_FILE.write_text(result.stdout, encoding="utf-8")
+    return HIGHLIGHT_FILE
 
-ul, ol {
-    margin: 0 0 0.85rem 1.3rem;
-    padding-left: 0.4rem;
-}
 
-li {
-    margin-bottom: 0.35rem;
-    font-size: 1rem;
-}
+def convert_markdown(
+    markdown_path: Path, formats: Iterable[str], highlight_style: Path
+) -> list[Path]:
+    """Convierte un único archivo Markdown a los formatos indicados."""
 
-li::marker {
-    color: var(--color-primary);
-    font-weight: 600;
-}
+    outputs: list[Path] = []
+    base_command = [
+        "pandoc",
+        str(markdown_path),
+        "--standalone",
+        "--resource-path",
+        str(markdown_path.parent),
+        "--highlight-style",
+        str(highlight_style),
+    ]
 
-blockquote {
-    margin: 1.1rem 0;
-    padding: 0.7rem 1.1rem;
-    border-left: 4px solid var(--color-primary);
-    background: var(--background-soft);
-    color: #1f2937;
-    font-style: italic;
-    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
-}
+    for fmt in formats:
+        target_fmt = fmt.lower()
+        if target_fmt not in SUPPORTED_FORMATS:
+            raise ConversionError(f"Formato no soportado: {fmt}")
 
-code {
-    font-family: var(--font-mono);
-    background: #f3f4f6;
-    padding: 0.08rem 0.4rem;
-    border-radius: 4px;
-    font-size: 0.95rem;
-}
+        output_path = markdown_path.with_suffix(f".{target_fmt}")
+        command = list(base_command)
 
-pre code {
-    padding: 0;
-    background: transparent;
-    font-size: 0.95rem;
-}
+        if target_fmt == "pdf":
+            command.extend(["--pdf-engine", "weasyprint"])
 
-.codehilite {
-    position: relative;
-    margin: 1.1rem 0 1.4rem 0;
-    padding: 1.2rem 1.25rem 1rem 1.25rem;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    background: var(--background-soft);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.09);
-    overflow: hidden;
-    --code-accent: #334155;
-    --code-background: #f8fafc;
-}
+        command.extend(["-o", str(output_path)])
+        _run_command(command)
+        outputs.append(output_path)
 
-.codehilite::before {
-    content: attr(data-language);
-    position: absolute;
-    top: 0;
-    left: 0;
-    padding: 0.45rem 0.9rem;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    font-weight: 700;
-    text-transform: uppercase;
-    background: var(--code-accent);
-    color: #ffffff;
-    border-bottom-right-radius: 10px;
-}
+    return outputs
 
-.codehilite pre {
-    margin: 0;
-    white-space: pre;
-    background: var(--code-background);
-    border-radius: 8px;
-    padding: 0.9rem 0.7rem 0.9rem 0.7rem;
-}
 
-.codehilite table {
-    width: 100%;
-    border-collapse: collapse;
-}
+def convert_single_markdown(markdown_file: Path, formats: set[str]) -> bool:
+    """Convierte un archivo Markdown si es válido."""
 
-.codehilite td {
-    border: none;
-    padding: 0;
-}
-
-.codehilite .linenos {
-    padding-right: 0.9rem;
-    border-right: 1px solid rgba(148, 163, 184, 0.35);
-    color: #94a3b8;
-}
-
-.codehilite .linenos pre {
-    background: transparent;
-    padding-right: 0.75rem;
-}
-
-.codehilite::-webkit-scrollbar {
-    height: 6px;
-}
-
-.codehilite::-webkit-scrollbar-thumb {
-    background: #9ca3af;
-    border-radius: 3px;
-}
-
-.codehilite.language-python,
-.codehilite[data-language="PYTHON"] {
-    --code-accent: #2563eb;
-    --code-background: #eff6ff;
-}
-
-.codehilite.language-java,
-.codehilite[data-language="JAVA"] {
-    --code-accent: #ea580c;
-    --code-background: #fff7ed;
-}
-
-.codehilite.language-c,
-.codehilite[data-language="C"] {
-    --code-accent: #059669;
-    --code-background: #ecfdf5;
-}
-
-.codehilite.language-cpp,
-.codehilite[data-language="CPP"],
-.codehilite.language-c-plus-plus {
-    --code-accent: #0ea5e9;
-    --code-background: #e0f2fe;
-}
-
-.codehilite .code-content {
-    font-family: var(--font-mono);
-    font-size: 0.94rem;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1.35rem 0;
-    font-size: 0.97rem;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-th, td {
-    border: 1px solid var(--border-color);
-    padding: 0.6rem 0.85rem;
-    text-align: left;
-}
-
-th {
-    background: #eef2ff;
-    color: #1e1b4b;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.035em;
-}
-
-tr:nth-child(even) td {
-    background: #f8fafc;
-}
-
-caption {
-    caption-side: bottom;
-    text-align: center;
-    font-size: 0.9rem;
-    color: var(--color-muted);
-    margin-top: 0.6rem;
-}
-
-a {
-    color: var(--color-primary);
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-img {
-    max-width: 100%;
-    display: block;
-    margin: 1rem auto;
-    border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
-}
-
-figure {
-    margin: 1.2rem auto;
-    text-align: center;
-}
-
-figcaption {
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
-    color: var(--color-muted);
-}
-
-hr {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 1.75rem 0;
-}
-
-.toc {
-    border: 1px solid rgba(37, 99, 235, 0.2);
-    border-radius: 12px;
-    padding: 1.2rem 1.4rem;
-    background: #eef2ff;
-    margin: 1.75rem 0;
-    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.12);
-}
-
-.toc > ul {
-    margin: 0.4rem 0 0 1.1rem;
-}
-
-.toc li {
-    margin-bottom: 0.25rem;
-}
-
-mark {
-    background: #fef08a;
-    padding: 0.1rem 0.25rem;
-    border-radius: 4px;
-}
-
-kbd {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    background: #e2e8f0;
-    border-radius: 6px;
-    padding: 0.15rem 0.4rem;
-    border: 1px solid rgba(148, 163, 184, 0.7);
-    box-shadow: inset 0 -2px 0 rgba(15, 23, 42, 0.1);
-}
-"""
-
-
-def _build_stylesheet() -> str:
-    formatter = HtmlFormatter(
-        style="material",
-        linenos="table",
-        cssclass="codehilite",
-        wrapcode=True,
-    )
-    highlight_css = formatter.get_style_defs(".codehilite")
-    extra_code_css = """
-.codehilite .hll { background-color: rgba(250, 204, 21, 0.25); }
-.codehilite span { font-size: 0.94rem; }
-"""
-    return "\n".join([BASE_CSS.strip(), highlight_css, extra_code_css.strip()])
-
-
-def _normalise_language_name(raw_language: str | None) -> str:
-    if not raw_language:
-        return "Texto"
-
-    language = raw_language.strip().lower()
-    aliases = {
-        "py": "Python",
-        "py3": "Python",
-        "python": "Python",
-        "java": "Java",
-        "c": "C",
-        "c++": "CPP",
-        "cpp": "CPP",
-        "cxx": "CPP",
-        "sh": "Shell",
-        "bash": "Shell",
-        "json": "JSON",
-        "yaml": "YAML",
-        "yml": "YAML",
-        "txt": "Texto",
-    }
-
-    if language in aliases:
-        return aliases[language]
-
-    return language.upper()
-
-
-def _extract_language_from_classes(classes: Iterable[str]) -> str | None:
-    for class_name in classes:
-        if class_name.startswith("language-"):
-            return class_name.split("-", 1)[1]
-        if class_name in {"python", "java", "c", "cpp"}:
-            return class_name
-    return None
-
-
-def _enhance_code_blocks(html_fragment: str) -> str:
-    soup = BeautifulSoup(html_fragment, "html.parser")
-
-    for block in soup.select("div.codehilite"):
-        block_classes = list(block.get("class", []))
-        language = _extract_language_from_classes(block_classes)
-
-        if language is None:
-            code_node = block.find("code")
-            if code_node:
-                language = _extract_language_from_classes(code_node.get("class", []))
-
-        label = _normalise_language_name(language)
-        block["data-language"] = label
-
-        if language:
-            lang_class = f"language-{language.lower()}"
-            if lang_class not in block_classes:
-                block_classes.append(lang_class)
-                block["class"] = block_classes
-
-        code_content = block.find("code")
-        if code_content:
-            existing = list(code_content.get("class", []))
-            if "code-content" not in existing:
-                code_content["class"] = [*existing, "code-content"]
-
-    return str(soup)
-
-
-def _build_html_document(markdown_text: str, title: str, stylesheet: str) -> str:
-    html_body = markdown(
-        markdown_text,
-        extensions=[
-            "fenced_code",
-            "codehilite",
-            "tables",
-            "toc",
-            "sane_lists",
-            "attr_list",
-            "def_list",
-            "footnotes",
-            "md_in_html",
-            "admonition",
-        ],
-        extension_configs={
-            "codehilite": {
-                "guess_lang": True,
-                "noclasses": False,
-                "pygments_style": "material",
-                "linenums": True,
-            },
-            "toc": {"permalink": "#"},
-        },
-    )
-
-    html_body = _enhance_code_blocks(html_body)
-
-    safe_title = escape(title)
-    return f"""<!DOCTYPE html>
-<html lang=\"es\">
-<head>
-    <meta charset=\"utf-8\">
-    <title>{safe_title}</title>
-    <style>
-    {stylesheet}
-    </style>
-</head>
-<body data-title=\"{safe_title}\">
-    <article class=\"document\">
-        <div class=\"document__header\">
-            <h1>{safe_title}</h1>
-        </div>
-        <div class=\"document__content\">
-            {html_body}
-        </div>
-    </article>
-</body>
-</html>"""
-
-
-def _infer_title(markdown_text: str, fallback: str) -> str:
-    for line in markdown_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            return stripped.lstrip("# ").strip() or fallback
-    return fallback
-
-
-def convert_markdown_to_pdf(markdown_path: Path) -> Path:
-    markdown_text = markdown_path.read_text(encoding="utf-8")
-    title = _infer_title(markdown_text, markdown_path.stem)
-    stylesheet = _build_stylesheet()
-    html_document = _build_html_document(markdown_text, title, stylesheet)
-
-    output_path = markdown_path.with_suffix(".pdf")
-    HTML(string=html_document, base_url=str(markdown_path.parent)).write_pdf(
-        str(output_path), stylesheets=[CSS(string=stylesheet)]
-    )
-
-    return output_path
-
-
-def convert_single_markdown(markdown_file: Path) -> bool:
     if not markdown_file.exists():
         print(f"Error: El archivo {markdown_file} no existe")
         return False
@@ -531,15 +126,19 @@ def convert_single_markdown(markdown_file: Path) -> bool:
 
     try:
         print(f"Convirtiendo: {markdown_file.name}")
-        pdf_path = convert_markdown_to_pdf(markdown_file)
-        print(f"✓ Creado: {pdf_path.name}")
+        highlight = ensure_highlight_style()
+        results = convert_markdown(markdown_file, formats, highlight)
+        for result in results:
+            print(f"✓ Creado: {result.name}")
         return True
-    except Exception as exc:  # pragma: no cover - ejecución manual
+    except ConversionError as exc:
         print(f"✗ Error al convertir {markdown_file.name}: {exc}")
         return False
 
 
-def convert_directory_markdowns(directory: Path) -> tuple[int, int]:
+def convert_directory_markdowns(directory: Path, formats: set[str]) -> tuple[int, int]:
+    """Convierte todos los Markdown dentro de un directorio de forma recursiva."""
+
     if not directory.exists():
         print(f"Error: El directorio {directory} no existe")
         return 0, 0
@@ -564,7 +163,7 @@ def convert_directory_markdowns(directory: Path) -> tuple[int, int]:
     failed = 0
 
     for md_file in markdown_files:
-        if convert_single_markdown(md_file):
+        if convert_single_markdown(md_file, formats):
             success += 1
         else:
             failed += 1
@@ -577,7 +176,9 @@ def convert_directory_markdowns(directory: Path) -> tuple[int, int]:
     return success, failed
 
 
-def convert_all_markdowns() -> tuple[int, int]:
+def convert_all_markdowns(formats: set[str]) -> tuple[int, int]:
+    """Convierte la carpeta por defecto de enunciados si existe."""
+
     script_dir = Path(__file__).parent
     candidate_roots = [
         script_dir.parent.parent.parent / "ejercicios" / "enunciados_sinteticos",
@@ -586,7 +187,7 @@ def convert_all_markdowns() -> tuple[int, int]:
 
     for base_path in candidate_roots:
         if base_path.exists():
-            return convert_directory_markdowns(base_path)
+            return convert_directory_markdowns(base_path, formats)
 
     print(
         "Error: No se encontró la carpeta 'enunciados_sinteticos'. "
@@ -597,14 +198,13 @@ def convert_all_markdowns() -> tuple[int, int]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Convertir archivos Markdown a PDF",
+        description="Convertir archivos Markdown con Pandoc",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Ejemplos:
-  python simple_converter.py                    # Convierte todos los Markdown de enunciados_sinteticos
-  python simple_converter.py -f documento.md    # Convierte un único archivo Markdown
-  python simple_converter.py -d carpeta         # Convierte todos los Markdown en una carpeta (recursivo)
-        """,
+        epilog="""Ejemplos:
+  python simple_converter.py                        # Convierte todos los Markdown a PDF
+  python simple_converter.py -f documento.md --docx  # Convierte un único archivo a DOCX
+  python simple_converter.py -d carpeta --pdf --docx # Convierte una carpeta a ambos formatos
+""",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -614,22 +214,48 @@ Ejemplos:
         "--directory",
         help="Directorio que contiene Markdown (incluye subdirectorios)",
     )
+
+    parser.add_argument(
+        "--pdf",
+        action="store_true",
+        help="Generar salida en PDF",
+    )
+    parser.add_argument(
+        "--docx",
+        action="store_true",
+        help="Generar salida en DOCX",
+    )
+
     return parser
+
+
+def determine_formats(args: argparse.Namespace) -> set[str]:
+    requested = {fmt for fmt, flag in {"pdf": args.pdf, "docx": args.docx}.items() if flag}
+    return requested or {"pdf"}
+
+
+def ensure_dependencies(formats: set[str]) -> None:
+    ensure_pandoc()
+    if "pdf" in formats:
+        ensure_weasyprint()
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    formats = determine_formats(args)
+    ensure_dependencies(formats)
+
     if args.file:
-        success = convert_single_markdown(Path(args.file))
+        success = convert_single_markdown(Path(args.file), formats)
         sys.exit(0 if success else 1)
 
     if args.directory:
-        success, failed = convert_directory_markdowns(Path(args.directory))
+        success, failed = convert_directory_markdowns(Path(args.directory), formats)
         sys.exit(0 if failed == 0 else 1)
 
-    success, failed = convert_all_markdowns()
+    success, failed = convert_all_markdowns(formats)
     sys.exit(0 if failed == 0 else 1)
 
 

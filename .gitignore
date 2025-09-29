@@ -30,3 +30,6 @@
 /asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/__pycache__/
 /asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/**/__pycache__/
 /asistente-asignatura/scriptsAuxiliares/conversores/pdf2Markdown/.pytest_cache/
+
+# Markdown2Pdf generated files
+/asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf/pandoc-highlight.theme

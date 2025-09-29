@@ -47,15 +47,25 @@ verify_dependencies() {
     ensure_poetry
     ensure_environment
     echo "🔍 Verificando dependencias principales..."
-    poetry run python - <<'PYCODE'
-try:
-    import markdown  # noqa: F401
-    import bs4  # noqa: F401
-    import weasyprint  # noqa: F401
-    print("✅ Dependencias verificadas correctamente")
-except Exception as exc:  # pragma: no cover - ejecución manual
-    raise SystemExit(f"❌ Error al verificar dependencias: {exc}")
-PYCODE
+
+    if ! command -v pandoc >/dev/null 2>&1; then
+        echo "❌ Pandoc no está instalado o no está en el PATH."
+        echo "   Instálalo siguiendo las instrucciones oficiales: https://pandoc.org/installing.html"
+        exit 1
+    fi
+
+    local pandoc_version=$(pandoc --version | head -n 1)
+    echo "   - ${pandoc_version}"
+
+    local weasy_version
+    if ! weasy_version=$(poetry run weasyprint --version 2>&1 | head -n 1); then
+        echo "❌ No se pudo ejecutar WeasyPrint desde el entorno Poetry."
+        echo "   Ejecuta ./run_md2pdf.sh install para reinstalar dependencias."
+        exit 1
+    fi
+    echo "   - ${weasy_version}"
+
+    echo "✅ Dependencias verificadas correctamente"
 }
 
 run_converter() {
@@ -65,7 +75,7 @@ run_converter() {
     echo "📁 Directorio actual: $(pwd)"
     echo "🐍 Python: $(poetry run which python)"
     echo ""
-    echo "🔄 Ejecutando conversión Markdown → PDF..."
+    echo "🔄 Ejecutando conversión Markdown → PDF/DOCX..."
     poetry run python simple_converter.py "$@"
 }
 
@@ -75,7 +85,8 @@ Uso del script:
   ./run_md2pdf.sh install                 # Crear/actualizar el entorno con Poetry
   ./run_md2pdf.sh update                  # Actualizar dependencias al último lock
   ./run_md2pdf.sh reinstall               # Regenerar el entorno desde cero
-  ./run_md2pdf.sh convert [opciones]      # Ejecutar el conversor Markdown → PDF
+  ./run_md2pdf.sh convert [opciones]      # Ejecutar el conversor Markdown → PDF/DOCX
+                                          #   Ejemplo: ./run_md2pdf.sh convert --docx
   ./run_md2pdf.sh help                    # Mostrar la ayuda del conversor
 EOF
 }

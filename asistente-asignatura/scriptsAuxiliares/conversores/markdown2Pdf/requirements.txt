@@ -1,4 +1,1 @@
-beautifulsoup4>=4.12
-markdown>=3.4
-pygments>=2.15
-weasyprint>=58.0
+weasyprint>=59.0
