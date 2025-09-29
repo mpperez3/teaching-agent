@@ -1,52 +1,72 @@
-# Markdown to PDF Converter
+# Markdown Converter (Pandoc)
 
-Conversor Python específico para el proyecto que transforma archivos Markdown en documentos PDF bien formateados. El proyecto
-incluye su propio environment virtual aislado dentro de la carpeta `markdown2Pdf`.
+Conversor mantenido con Poetry que transforma Markdown en PDF o DOCX utilizando [Pandoc](https://pandoc.org/). El entorno
+virtual se crea automáticamente dentro de `markdown2Pdf/` para mantener las dependencias aisladas.
 
-## 🚀 Uso Rápido
+## 🚀 Uso rápido
 
-### Conversión automática con environment dedicado
+### Preparar el entorno
 ```bash
 cd asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf
+./run_md2pdf.sh install
+```
+
+### Actualizar dependencias bloqueadas
+```bash
+./run_md2pdf.sh update
+```
+
+### Reconstruir el entorno
+```bash
+./run_md2pdf.sh reinstall
+```
+
+### Convertir Markdown
+```bash
+# Convierte todos los enunciados en PDF
 ./run_md2pdf.sh convert
+
+# Archivo concreto a PDF
+./run_md2pdf.sh convert -- -f ruta/al/archivo.md
+
+# Archivo concreto a DOCX con otro estilo de resaltado
+./run_md2pdf.sh convert -- -f archivo.md -t docx --highlight-style tango
 ```
 
-### Solo activar el environment
-```bash
-cd asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf
-./run_md2pdf.sh
-```
+> El doble guion (`--`) es necesario para pasar argumentos directamente al script Python.
 
-## 📁 Estructura del Proyecto
+## ⚙️ Características principales
+
+- Conversión a **PDF** (motor `weasyprint`) o **DOCX** con un único comando.
+- Resaltado de sintaxis gestionado por Pandoc (`--highlight-style`) con soporte inmediato para Python, Java, C/C++ y el resto de
+  lenguajes soportados por el motor.
+- Conversión recursiva de directorios completos o selección de ficheros individuales.
+- Resolución automática de rutas de recursos (imágenes, CSS, etc.) relativa al Markdown original.
+- Posibilidad de enumerar los estilos de resaltado disponibles (`--list-highlight-styles`).
+- Entorno aislado con Poetry y binario de Pandoc suministrado por `pypandoc-binary`.
+
+## 📁 Estructura
 
 ```
 markdown2Pdf/
-├── .venv/                # Environment virtual (se crea en la primera ejecución)
-├── simple_converter.py   # Conversor Markdown → PDF
-├── run_md2pdf.sh         # Script de activación y ejecución
-├── requirements.txt      # Dependencias mínimas
-├── pyproject.toml        # Configuración del proyecto
+├── .venv/                # Entorno Poetry (generado automáticamente)
+├── simple_converter.py   # Conversor Markdown → PDF/DOCX
+├── run_md2pdf.sh         # Script de gestión y ejecución
+├── requirements.txt      # Compatibilidad legacy (instalación manual)
+├── pyproject.toml        # Configuración del proyecto (Poetry)
+├── poetry.lock           # Dependencias bloqueadas
 └── README.md             # Esta documentación
 ```
 
-## ⚙️ Características
+## 🔍 Consejos
 
-- **Conversión recursiva** de todos los Markdown en un directorio y subdirectorios.
-- **Modo archivo único** para convertir solo un `.md`.
-- **Renderizado profesional** con tipografía moderna, encabezados y pies de página automáticos.
-- **Resaltado de sintaxis** basado en *Pygments* para bloques de código (incluye Java, Python, C y más).
-- **Soporte completo** para tablas, listas y citas con estilos coherentes.
-- **Salida en la misma carpeta** que el Markdown origen, con la misma ruta relativa.
-- **Environment aislado** que no interfiere con otras instalaciones Python.
+- Si necesitas conocer los estilos de resaltado compatibles, ejecuta:
+  ```bash
+  ./run_md2pdf.sh convert -- --list-highlight-styles
+  ```
+- Para cambiar la carpeta por defecto (`ejercicios/enunciados_sinteticos`), usa `--directory` con la ruta deseada.
+- El archivo de salida puede fijarse con `--output` cuando se usa `--file`.
 
-## 📄 Salida
+## 📄 Resultados
 
-Cada archivo `*.md` genera un `*.pdf` en el mismo directorio que el original.
-
-**Ejemplo:**
-- Input: `base_de_conocimiento/apuntes/tema1.md`
-- Output: `base_de_conocimiento/apuntes/tema1.pdf`
-
-## ✨ Estado
-
-Proyecto listo para usar en el flujo inverso del conversor `pdf2Markdown`.
+Los archivos generados se guardan junto al Markdown original con la extensión correspondiente (`.pdf` o `.docx`).

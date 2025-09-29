@@ -1,3 +1,2 @@
-markdown>=3.4
-pygments>=2.15
+pypandoc-binary>=1.13
 weasyprint>=58.0

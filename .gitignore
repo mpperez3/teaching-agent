@@ -7,6 +7,19 @@
 /asistente-asignatura/ejercicios/**/*.java
 **/.venv/
 **/.env/
+**/.env
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.log
+**/.mypy_cache/
+**/.pytest_cache/
+**/.coverage
+**/.tox/
+**/htmlcov/
+**/.idea/
+**/.vscode/
+*.sqlite3
 
 
 # PDF2Markdown converter project

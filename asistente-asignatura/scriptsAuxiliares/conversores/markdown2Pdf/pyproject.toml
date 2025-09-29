@@ -1,29 +1,21 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+[tool.poetry]
+name = "markdown2pdf-pandoc"
+version = "2.0.0"
+description = "Conversor Markdown multi-formato usando Pandoc"
+authors = ["Teaching Agent <devnull@example.com>"]
+package-mode = false
 
-[project]
-name = "markdown2pdf-simple"
-version = "1.0.0"
-description = "Conversor sencillo de Markdown a PDF para el proyecto teaching-agent"
-requires-python = ">=3.10"
-dependencies = [
-    "markdown>=3.4",
-    "pygments>=2.15",
-    "weasyprint>=58.0",
-]
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+pypandoc-binary = ">=1.13"
+weasyprint = ">=58.0"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-]
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.0.0"
 
-[project.scripts]
+[tool.poetry.scripts]
 md2pdf = "simple_converter:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
-
-[tool.setuptools]
-py-modules = ["simple_converter"]
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
