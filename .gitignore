@@ -33,3 +33,17 @@
 
 # Markdown2Pdf generated files
 /asistente-asignatura/scriptsAuxiliares/conversores/markdown2Pdf/pandoc-highlight.theme
+
+# Additional items
+.DS_Store
+Thumbs.db
+*.log
+*.sqlite3
+
+# Temporary & build directories
+tmp/
+temp/
+
+# Project-level config (not in a subproject .venv)
+.env.local
+.env.*.local

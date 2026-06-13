@@ -16,6 +16,13 @@ import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
+# Path configuration: resolve from project root, never via magic parent traversals
+try:
+    from ...config import BASE_DIR  # noqa: E402
+except ImportError:
+    BASE_DIR = None  # noqa: F841
+
+
 DEFAULT_HIGHLIGHT = "pygments"
 HIGHLIGHT_FILE = Path(__file__).with_name("pandoc-highlight.theme")
 SUPPORTED_FORMATS = {"pdf", "docx"}
@@ -179,11 +186,17 @@ def convert_directory_markdowns(directory: Path, formats: set[str]) -> tuple[int
 def convert_all_markdowns(formats: set[str]) -> tuple[int, int]:
     """Convierte la carpeta por defecto de enunciados si existe."""
 
-    script_dir = Path(__file__).parent
-    candidate_roots = [
-        script_dir.parent.parent.parent / "ejercicios" / "enunciados_sinteticos",
-        script_dir.parent.parent.parent / "enunciados_sinteticos",
-    ]
+    if BASE_DIR is not None:
+        candidate_roots = [
+            BASE_DIR / "ejercicios" / "enunciados_sinteticos",
+        ]
+    else:
+        # Fallback: resolve at runtime from script location
+        script_dir = Path(__file__).parent
+        candidate_roots = [
+            script_dir.parent.parent.parent / "ejercicios" / "enunciados_sinteticos",
+            script_dir.parent.parent.parent / "enunciados_sinteticos",
+        ]
 
     for base_path in candidate_roots:
         if base_path.exists():

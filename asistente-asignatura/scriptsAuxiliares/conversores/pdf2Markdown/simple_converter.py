@@ -25,6 +25,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
+# Path configuration: resolve from project root, never via magic parent traversals
+try:
+    from ...config import BASE_DE_CONOCIMIENTO  # noqa: E402
+except ImportError:
+    BASE_DE_CONOCIMIENTO = None  # noqa: F841
+
+
 from pygments.lexers import guess_lexer
 from pygments.util import ClassNotFound
 
@@ -668,8 +675,12 @@ def convert_directory_pdfs(directory_path: str) -> Tuple[int, int]:
 def convert_all_pdfs() -> Tuple[int, int]:
     """Convert all PDFs inside the base_de_conocimiento folder."""
 
-    script_dir = Path(__file__).parent
-    base_path = script_dir.parent.parent.parent / 'base_de_conocimiento'
+    if BASE_DE_CONOCIMIENTO is not None:
+        base_path = BASE_DE_CONOCIMIENTO
+    else:
+        # Fallback: resolve at runtime from script location
+        script_dir = Path(__file__).parent
+        base_path = script_dir.parent.parent.parent / 'base_de_conocimiento'
 
     if not base_path.exists():
         print(f"Error: Base path {base_path} does not exist")
