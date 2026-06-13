@@ -47,3 +47,6 @@ temp/
 # Project-level config (not in a subproject .venv)
 .env.local
 .env.*.local
+
+# Agent related
+.claude/
