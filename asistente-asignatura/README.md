@@ -28,3 +28,14 @@
 
 ## Importante
   - **/restricciones**:Conetiene reglas de comportamiento y uso del asistente específicas a lo que puedan pedir. Siempre se deben consultar paa ver cuales se relacionan con lo que te han pedido y son de obligado cumplimiento. Tu siguente paso es comprobarlas
+## 🤖 Arquitectura de Agentes del Sistema
+Este repositorio implementa un sistema de **Máscaras de Rol** (Basado en ECC / Skill-Authoring). Al realizar cualquier interacción, el sistema detectará automáticamente tus requisitos y activará al **Coordinador**, quien asignará el rol adecuado:
+
+| Agente | Carpeta de acción | Restricción clave |
+|---|---|---|
+| 🛡️ **Guardián** | `restricciones/` | Chequeo obligatorio antes de cualquier acción |
+| 📝 **Generador** | `ejercicios/enunciados_sinteticos/` | Crea MD + PDF (Nunca copia contenido exacto) |
+| 🤝 **Asistente** | `ejercicios/alumno/` | Solo pistas y esqueletos (**NO SOLUCIÓN**) |
+| 🧐 **Analizador** | `ejercicios/resueltos/` | Auditor para el profesor (Sin retroalimentación a generador) |
+| 🎨 **Diagramma** | Visualización Mermaid | Genera y valida (prev/next) punteros antes de mostrar |
+| 🔄 **Conversor** | `scriptsAuxiliares/` | Gestiona pipelines de archivos |
